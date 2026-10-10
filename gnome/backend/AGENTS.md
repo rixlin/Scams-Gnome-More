@@ -48,7 +48,7 @@ gnome/backend/
       llm.py             # Gemini wrapper (Live session or streaming text)
       voice.py           # ElevenLabs streaming TTS -> ulaw_8000
     db/
-      schema.sql         # Tiger Data tables / hypertable
+      schema.sql         # Tiger Data tables
       repo.py            # insert/query helpers
     models.py            # Pydantic request/response + WS event schemas
   tests/
@@ -107,7 +107,7 @@ LiveHub is an in-memory `dict[call_id, set[WebSocket]]` with an `asyncio.Queue` 
 ## Gnome Agent
 
 ### Persona generation (`persona.py`)
-When a call starts (in `/twilio/voice`), one Gemini call returns JSON `{name, backstory, personality_traits, speaking_quirks}`. Example: "Barnaby Thistlewick, 347-year-old garden gnome from Dorset, feuding with the neighbour's flamingo." The persona is cached on the CallSession and later saved to the `gnomes` table. Settings can pin a fixed gnome instead of generating one per call.
+When a call starts (in `/twilio/voice`), one Gemini call returns JSON `{name, backstory, personality_traits, speaking_quirks}`. Example: "Barnaby Thistlewick, 347-year-old garden gnome from Dorset, feuding with the neighbour's flamingo." The persona is cached on the CallSession and later saved on the call's row in `calls`. Settings can pin a fixed gnome instead of generating one per call.
 
 ### Realtime pipeline (`gnome.py`, `llm.py`, `voice.py`)
 Recommended: **Gemini Live API** with caller audio in (PCM16 16 kHz, upsampled from 8 kHz μ-law), `response_modalities=["TEXT"]` and input transcription enabled. Gemini handles VAD/turn-taking and STT, and streams text back. That text goes straight into **ElevenLabs streaming TTS** (WebSocket input streaming, `eleven_flash_v2_5`, `ulaw_8000`) to keep latency low. The gnome's voice is always ElevenLabs; Gemini is the brain only.
@@ -131,30 +131,24 @@ Operator feedback and personality edits get added under a clear `## Operator not
 Tiger Data is managed TimescaleDB on Postgres; connect with `asyncpg` using `DATABASE_URL`. **Nothing is written during the call.** All state lives in CallSession memory and is persisted in one transaction when the call ends (Twilio `stop` event, status callback or terminate endpoint, whichever comes first, guarded so it runs only once).
 
 ```sql
-CREATE TABLE gnomes (
-  id UUID PRIMARY KEY, name TEXT NOT NULL, backstory TEXT NOT NULL,
-  personality JSONB, voice_id TEXT, created_at TIMESTAMPTZ DEFAULT now()
-);
-CREATE TABLE calls (
+CREATE TABLE calls (                 -- one row per finished call
   id UUID PRIMARY KEY, twilio_call_sid TEXT UNIQUE, caller_number TEXT,
-  gnome_id UUID REFERENCES gnomes(id),
-  started_at TIMESTAMPTZ NOT NULL, ended_at TIMESTAMPTZ, duration_s INT, end_reason TEXT
+  gnome_name TEXT, gnome_backstory TEXT, gnome_personality JSONB,       -- which gnome answered
+  started_at TIMESTAMPTZ NOT NULL, ended_at TIMESTAMPTZ, duration_s INT, end_reason TEXT,
+  transcript JSONB NOT NULL DEFAULT '[]'  -- ordered [{seq, ts, speaker: "caller"|"gnome", text}]
 );
-CREATE TABLE utterances (            -- transcript lines
-  call_id UUID REFERENCES calls(id), ts TIMESTAMPTZ NOT NULL, seq INT NOT NULL,
-  speaker TEXT CHECK (speaker IN ('caller','gnome')),   -- who was talking
-  gnome_id UUID,                                          -- which gnome (when speaker = gnome)
-  text TEXT NOT NULL
-);
-SELECT create_hypertable('utterances', 'ts');
-CREATE TABLE call_audio (
-  call_id UUID PRIMARY KEY REFERENCES calls(id),
+CREATE TABLE call_audio (            -- at most one recording per call
+  call_id UUID PRIMARY KEY REFERENCES calls(id) ON DELETE CASCADE,
   format TEXT DEFAULT 'wav', sample_rate INT DEFAULT 8000, channels INT DEFAULT 2,
   audio BYTEA NOT NULL               -- stereo WAV: L = caller, R = gnome
 );
 CREATE TABLE settings (key TEXT PRIMARY KEY, value JSONB NOT NULL);
 ```
-Required fields map to: which gnome is talking → `utterances.gnome_id`/`calls.gnome_id`; AI-generated backstory and gnome name → `gnomes`; who was talking and what they said → `utterances.speaker/text`; call audio → `call_audio.audio`. A 10-minute 8 kHz stereo call is about 19 MB, which fits in Postgres. Move audio to object storage later if needed.
+The transcript lives on its call's row, and the recording is keyed by that call's id, so a transcript and
+its audio are always tied to the same call. Both are written in one transaction, so a call is never
+half-saved. Required fields map to: gnome name and AI-generated backstory → `calls.gnome_name/gnome_backstory`;
+who was talking and what they said → `calls.transcript[].speaker/text`; call audio → `call_audio.audio`.
+A 10-minute 8 kHz stereo call is about 19 MB, which fits in Postgres. Move audio to object storage later if needed.
 
 ## Build order (milestones)
 1. **Skeleton:** FastAPI app, config, `/health`, `requirements.txt`, `.env.example`. Run behind `cloudflared tunnel --url http://localhost:8000`.

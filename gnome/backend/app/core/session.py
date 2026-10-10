@@ -27,7 +27,6 @@ class CallSession:
     _started_mono: float = field(default_factory=time.monotonic)
 
     # Gnome identity
-    gnome_id: uuid.UUID = field(default_factory=uuid.uuid4)
     persona: Persona | None = None
     persona_ready: asyncio.Event = field(default_factory=asyncio.Event)
     personality_override: str | None = None

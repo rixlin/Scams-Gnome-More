@@ -34,10 +34,6 @@ async def connect() -> None:
     pool = await asyncpg.create_pool(url, min_size=1, max_size=5, init=_init_conn)
     async with pool.acquire() as conn:
         await conn.execute(_SCHEMA)
-        try:
-            await conn.execute("SELECT create_hypertable('utterances', 'ts', if_not_exists => TRUE)")
-        except asyncpg.PostgresError as e:
-            log.warning("utterances not converted to a hypertable (is TimescaleDB enabled?): %s", e)
     log.info("connected to Tiger Data")
 
 
@@ -55,37 +51,26 @@ def _pool() -> asyncpg.Pool:
 
 
 async def save_call(session: CallSession) -> None:
-    """Persist a finished call in one transaction."""
+    """Persist a finished call (gnome + transcript) and its recording in one transaction."""
     persona = session.persona
     duration = int((session.ended_at - session.started_at).total_seconds()) if session.ended_at else None
+    personality = {
+        "traits": persona.personality_traits,
+        "quirks": persona.speaking_quirks,
+        "override": session.personality_override,
+        "voice_id": session.voice_id,
+    } if persona else None
+    transcript = [u.model_dump(mode="json") for u in session.transcript]
     wav = session.recording_wav() if session.has_audio else None
 
     async with _pool().acquire() as conn, conn.transaction():
-        if persona:
-            personality = {
-                "traits": persona.personality_traits,
-                "quirks": persona.speaking_quirks,
-                "override": session.personality_override,
-            }
-            await conn.execute(
-                """INSERT INTO gnomes (id, name, backstory, personality, voice_id)
-                   VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING""",
-                session.gnome_id, persona.name, persona.backstory, personality, session.voice_id,
-            )
         await conn.execute(
-            """INSERT INTO calls (id, twilio_call_sid, caller_number, gnome_id,
-                                  started_at, ended_at, duration_s, end_reason)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
+            """INSERT INTO calls (id, twilio_call_sid, caller_number, gnome_name, gnome_backstory,
+                                  gnome_personality, started_at, ended_at, duration_s, end_reason, transcript)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)""",
             session.id, session.call_sid, session.caller_number,
-            session.gnome_id if persona else None,
-            session.started_at, session.ended_at, duration, session.end_reason,
-        )
-        await conn.executemany(
-            "INSERT INTO utterances (call_id, ts, seq, speaker, gnome_id, text) VALUES ($1, $2, $3, $4, $5, $6)",
-            [
-                (session.id, u.ts, u.seq, u.speaker, session.gnome_id if u.speaker == "gnome" else None, u.text)
-                for u in session.transcript
-            ],
+            persona.name if persona else None, persona.backstory if persona else None, personality,
+            session.started_at, session.ended_at, duration, session.end_reason, transcript,
         )
         if wav is not None:
             await conn.execute(
@@ -94,36 +79,33 @@ async def save_call(session: CallSession) -> None:
             )
 
 
-_SUMMARY_SQL = """
-    SELECT c.id, c.twilio_call_sid, c.caller_number, g.name AS gnome_name,
-           c.started_at, c.ended_at, c.duration_s, c.end_reason
-    FROM calls c LEFT JOIN gnomes g ON g.id = c.gnome_id
-"""
+_SUMMARY_COLS = """c.id, c.twilio_call_sid, c.caller_number, c.gnome_name,
+                   c.started_at, c.ended_at, c.duration_s, c.end_reason"""
 
 
 async def list_calls(limit: int, offset: int) -> list[dict[str, Any]]:
-    rows = await _pool().fetch(_SUMMARY_SQL + " ORDER BY c.started_at DESC LIMIT $1 OFFSET $2", limit, offset)
+    rows = await _pool().fetch(
+        f"SELECT {_SUMMARY_COLS} FROM calls c ORDER BY c.started_at DESC LIMIT $1 OFFSET $2", limit, offset
+    )
     return [dict(r) for r in rows]
 
 
 async def get_call(call_id: UUID) -> dict[str, Any] | None:
-    async with _pool().acquire() as conn:
-        row = await conn.fetchrow(_SUMMARY_SQL + " WHERE c.id = $1", call_id)
-        if row is None:
-            return None
-        call = dict(row)
-        gnome = await conn.fetchrow(
-            "SELECT g.id, g.name, g.backstory, g.personality, g.voice_id FROM gnomes g "
-            "JOIN calls c ON c.gnome_id = g.id WHERE c.id = $1",
-            call_id,
-        )
-        utterances = await conn.fetch(
-            "SELECT seq, ts, speaker, text FROM utterances WHERE call_id = $1 ORDER BY seq", call_id
-        )
-        has_audio = await conn.fetchval("SELECT EXISTS (SELECT 1 FROM call_audio WHERE call_id = $1)", call_id)
-    call["gnome"] = dict(gnome) if gnome else None
-    call["utterances"] = [dict(u) for u in utterances]
-    call["has_audio"] = has_audio
+    row = await _pool().fetchrow(
+        f"""SELECT {_SUMMARY_COLS}, c.gnome_backstory, c.gnome_personality, c.transcript,
+                   EXISTS (SELECT 1 FROM call_audio a WHERE a.call_id = c.id) AS has_audio
+            FROM calls c WHERE c.id = $1""",
+        call_id,
+    )
+    if row is None:
+        return None
+    call = dict(row)
+    backstory, personality = call.pop("gnome_backstory"), call.pop("gnome_personality")
+    call["gnome"] = (
+        {"name": call["gnome_name"], "backstory": backstory, "personality": personality}
+        if call["gnome_name"] else None
+    )
+    call["utterances"] = sorted(call.pop("transcript"), key=lambda u: u["seq"])
     return call
 
 

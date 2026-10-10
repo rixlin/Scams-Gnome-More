@@ -40,9 +40,8 @@ async def status() -> dict:
                        "detail": f"{cfg.gemini_live_model} ({cfg.gemini_live_modality}) / {cfg.gemini_model}"},
             "elevenlabs": {"ok": not (is_placeholder(cfg.elevenlabs_api_key) or is_placeholder(cfg.elevenlabs_voice_id)),
                            "detail": cfg.elevenlabs_model},
-            "twilio": {"ok": not any(is_placeholder(v) for v in (
-                cfg.twilio_account_sid, cfg.twilio_auth_token, cfg.twilio_phone_number)),
-                       "detail": "account + auth token + phone number"},
+            "twilio": {"ok": not any(is_placeholder(v) for v in (cfg.twilio_account_sid, cfg.twilio_auth_token)),
+                       "detail": "account SID + auth token (phone number is only used by run.py)"},
             "database": {"ok": repo.pool is not None, "detail": "Tiger Data"},
         },
     }

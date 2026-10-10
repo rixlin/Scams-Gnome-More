@@ -9,6 +9,7 @@ import base64
 import itertools
 import logging
 import random
+import re
 
 import numpy as np
 from google.genai import types
@@ -24,6 +25,25 @@ log = logging.getLogger(__name__)
 GEMINI_INPUT_RATE = 16000
 _FRAMES_PER_SEND = 5  # 5 x 20 ms Twilio frames = 100 ms per Gemini audio message
 _RECONNECT_BACKOFF_S = (1, 2, 5, 10)
+
+
+class StageDirectionFilter:
+    """Drops *stage directions* from streamed text, even when a span is split across chunks."""
+
+    def __init__(self) -> None:
+        self.inside = False
+
+    def feed(self, chunk: str) -> str:
+        out = []
+        for ch in chunk:
+            if ch == "*":
+                self.inside = not self.inside
+            elif not self.inside:
+                out.append(ch)
+        return "".join(out)
+
+    def reset(self) -> None:
+        self.inside = False
 
 
 class _Utterance:
@@ -45,7 +65,7 @@ class _Utterance:
 
     @property
     def text(self) -> str:
-        return "".join(self.text_parts).strip()
+        return re.sub(r"\s+", " ", "".join(self.text_parts)).strip()
 
     async def _run(self) -> None:
         session = self.agent.session
@@ -110,6 +130,7 @@ class GnomeAgent:
         self._utt_counter = itertools.count(1)
         self._caller_buf = ""
         self._greeted = False
+        self._stage_filter = StageDirectionFilter()
 
     # ---- inputs from the Twilio socket ----
 
@@ -269,6 +290,9 @@ class GnomeAgent:
         self._caller_buf = ""
 
     def _on_gnome_text(self, text: str) -> None:
+        text = self._stage_filter.feed(text)
+        if not text or (self._utterance is None and not text.strip()):
+            return
         if self._utterance is None:
             self._flush_caller()
             self.session.set_state("thinking")
@@ -278,6 +302,7 @@ class GnomeAgent:
 
     def _end_gnome_turn(self) -> None:
         self._flush_caller()
+        self._stage_filter.reset()
         utt, self._utterance = self._utterance, None
         if utt is None:
             return
@@ -288,6 +313,7 @@ class GnomeAgent:
 
     async def _barge_in(self) -> None:
         """Caller talked over the gnome: stop TTS and flush audio Twilio hasn't played yet."""
+        self._stage_filter.reset()
         utt, self._utterance = self._utterance, None
         if utt is not None:
             utt.task.cancel()

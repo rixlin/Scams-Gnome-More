@@ -7,7 +7,7 @@ import pytest
 from google.genai import types
 
 from app.agent import gnome as gnome_mod
-from app.agent.gnome import GnomeAgent
+from app.agent.gnome import GnomeAgent, StageDirectionFilter
 from app.agent.prompts import FALLBACK_PERSONA
 from app.core import audio
 from app.core.session import CallSession
@@ -55,8 +55,9 @@ def test_turn_produces_transcript_audio_and_mark(monkeypatch, modality):
     turn = [
         _msg(input_transcription=types.Transcription(text="Hello, this is")),
         _msg(input_transcription=types.Transcription(text=" your bank.")),
-        gnome_text("Oh hello!"),
-        gnome_text(" Which bank?", turn_complete=True),
+        gnome_text("*clears thr"),
+        gnome_text("oat* Oh hello!"),
+        gnome_text(" *ceramic clank* Which bank?", turn_complete=True),
     ]
 
     async def scenario():
@@ -85,3 +86,9 @@ def test_turn_produces_transcript_audio_and_mark(monkeypatch, modality):
 
     agent.on_mark(sent[-1]["mark"]["name"])
     assert not session.gnome_speaking and session.gnome_state == "listening"
+
+
+def test_stage_direction_filter_handles_split_spans():
+    f = StageDirectionFilter()
+    chunks = ["*Hollow cer", "amic thud* Hello, ", "*clears", " throat* friend!"]
+    assert "".join(f.feed(c) for c in chunks) == " Hello,  friend!"

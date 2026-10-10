@@ -53,11 +53,9 @@ class PersonalityIn(BaseModel):
 
 
 class GnomeOut(BaseModel):
-    id: UUID
     name: str
-    backstory: str
+    backstory: str | None = None
     personality: dict[str, Any] | None = None
-    voice_id: str | None = None
 
 
 class CallSummary(BaseModel):
