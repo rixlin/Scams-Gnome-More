@@ -158,14 +158,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
     if (typeof window !== "undefined") {
       try {
-        const stored = JSON.parse(
+        const storedDetails = JSON.parse(
           window.localStorage.getItem("gnome_debug_call_details") || "{}"
         );
-        stored[newCall.id] = fullDetail;
+        storedDetails[newCall.id] = fullDetail;
         window.localStorage.setItem(
           "gnome_debug_call_details",
-          JSON.stringify(stored)
+          JSON.stringify(storedDetails)
         );
+
+        const storedCalls: CallSessionSummary[] = JSON.parse(
+          window.localStorage.getItem("gnome_debug_calls") || "[]"
+        );
+        const updatedCalls = [newCall, ...storedCalls.filter((c) => c.id !== newCall.id)];
+        window.localStorage.setItem(
+          "gnome_debug_calls",
+          JSON.stringify(updatedCalls)
+        );
+
+        window.dispatchEvent(new Event("gnome_calls_updated"));
       } catch {
         // Fallback
       }

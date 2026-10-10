@@ -23,6 +23,8 @@ export interface CallSessionSummary {
   ended_at?: string | null;
   duration_seconds: number;
   status: "active" | "ended";
+  recording_url?: string | null;
+  recording_status?: "available" | "unavailable" | "deleted";
 }
 
 export interface GnomeProfile {
@@ -51,6 +53,8 @@ export interface CallSessionDetail {
   ended_at?: string | null;
   duration_seconds: number;
   status: "active" | "ended";
+  recording_url?: string | null;
+  recording_status?: "available" | "unavailable" | "deleted";
   transcript: TranscriptTurn[];
 }
 

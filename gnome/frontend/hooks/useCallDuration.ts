@@ -8,27 +8,37 @@ export function useCallDuration(
   initialDurationSeconds: number = 0,
   endedAt?: string | Date | null
 ): number {
-  const [elapsed, setElapsed] = useState<number>(() => {
+  const computeFinalDuration = (): number => {
     const startTime = new Date(startedAt).getTime();
-    if (status !== "active") {
-      if (initialDurationSeconds > 0) return initialDurationSeconds;
-      if (endedAt) {
-        const endTime = new Date(endedAt).getTime();
-        if (!isNaN(startTime) && !isNaN(endTime)) {
-          return Math.max(1, Math.floor((endTime - startTime) / 1000));
-        }
+    if (endedAt) {
+      const endTime = new Date(endedAt).getTime();
+      if (!isNaN(startTime) && !isNaN(endTime) && endTime >= startTime) {
+        return Math.max(1, Math.floor((endTime - startTime) / 1000));
       }
-      return initialDurationSeconds;
     }
+    if (initialDurationSeconds > 0) return initialDurationSeconds;
+    return 0;
+  };
+
+  const [elapsed, setElapsed] = useState<number>(() => {
+    if (status !== "active") {
+      return computeFinalDuration();
+    }
+    const startTime = new Date(startedAt).getTime();
     if (isNaN(startTime)) return initialDurationSeconds;
     return Math.max(0, Math.floor((Date.now() - startTime) / 1000));
   });
 
   useEffect(() => {
-    if (status !== "active") return;
+    if (status !== "active") {
+      setElapsed(computeFinalDuration());
+      return;
+    }
 
     const startTime = new Date(startedAt).getTime();
     if (isNaN(startTime)) return;
+
+    setElapsed(Math.max(0, Math.floor((Date.now() - startTime) / 1000)));
 
     const interval = setInterval(() => {
       const now = Date.now();
@@ -36,18 +46,10 @@ export function useCallDuration(
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [startedAt, status]);
+  }, [startedAt, status, endedAt, initialDurationSeconds]);
 
   if (status !== "active") {
-    if (initialDurationSeconds > 0) return initialDurationSeconds;
-    if (endedAt) {
-      const startTime = new Date(startedAt).getTime();
-      const endTime = new Date(endedAt).getTime();
-      if (!isNaN(startTime) && !isNaN(endTime)) {
-        return Math.max(1, Math.floor((endTime - startTime) / 1000));
-      }
-    }
-    return initialDurationSeconds;
+    return computeFinalDuration();
   }
 
   return elapsed;

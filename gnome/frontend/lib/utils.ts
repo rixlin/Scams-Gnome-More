@@ -26,3 +26,22 @@ export function formatStartTime(dateInput: string | Date): string {
   }
 }
 
+export function formatCallDateTime(dateInput: string | Date): string {
+  try {
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return String(dateInput);
+    const dateStr = d.toLocaleDateString([], {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    const timeStr = d.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    return `${dateStr} @ ${timeStr}`;
+  } catch {
+    return String(dateInput);
+  }
+}
+

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, Suspense } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { CallSessionDetail } from "../../../lib/types";
+import { CallSessionDetail, CallSessionSummary } from "../../../lib/types";
 import { fetchCallDetail, terminateCall } from "../../../lib/api";
 import { SessionHeader } from "../../../components/session/SessionHeader";
 import { OverlappedAudioPlayer } from "../../../components/session/OverlappedAudioPlayer";
@@ -85,12 +85,35 @@ function CallSessionContent() {
     if (!callId) return;
     setIsTerminating(true);
     try {
+      const nowIso = new Date().toISOString();
+      const startTime = call ? new Date(call.started_at).getTime() : Date.now();
+      const finalDuration = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+
       await terminateCall(callId, reason);
-      setCall((prev) => (prev ? { ...prev, status: "ended" } : null));
+
+      setCall((prev) => (prev ? {
+        ...prev,
+        status: "ended",
+        ended_at: nowIso,
+        duration_seconds: finalDuration,
+      } : null));
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Termination failed.");
     } finally {
       setIsTerminating(false);
+    }
+  };
+
+  const handleAddDebugCall = (newCall: CallSessionSummary) => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = JSON.parse(
+          window.localStorage.getItem("gnome_debug_calls") || "[]"
+        );
+        const updated = [newCall, ...stored.filter((c: CallSessionSummary) => c.id !== newCall.id)];
+        window.localStorage.setItem("gnome_debug_calls", JSON.stringify(updated));
+        window.dispatchEvent(new Event("gnome_calls_updated"));
+      } catch {}
     }
   };
 
@@ -99,7 +122,7 @@ function CallSessionContent() {
 
   return (
     <div className="h-screen max-h-screen bg-canvas text-zinc-100 flex flex-col font-sans w-full overflow-hidden">
-      <Navbar />
+      <Navbar onAddDebugCall={handleAddDebugCall} />
 
       <main className="w-full px-4 sm:px-6 xl:px-8 py-3 flex-1 min-h-0 flex flex-col overflow-hidden">
         {loading && (
@@ -138,7 +161,11 @@ function CallSessionContent() {
                 isTerminating={isTerminating}
               />
 
-              <OverlappedAudioPlayer callId={call.id} />
+              <OverlappedAudioPlayer
+                callId={call.id}
+                isCallActive={isCallActive}
+                call={call}
+              />
 
               <GnomeLiveEditor
                 callId={call.id}

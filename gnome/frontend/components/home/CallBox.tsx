@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Radio, Clock, Calendar, User, PhoneCall, ShieldAlert, Check } from "lucide-react";
 import { CallSessionSummary } from "../../lib/types";
 import { useCallDuration } from "../../hooks/useCallDuration";
-import { formatDuration, formatStartTime } from "../../lib/utils";
+import { formatDuration, formatCallDateTime } from "../../lib/utils";
 
 interface CallBoxProps {
   call: CallSessionSummary;
@@ -126,7 +126,7 @@ export const CallBox: React.FC<CallBoxProps> = ({
               <PhoneCall className="w-3.5 h-3.5 text-blue-400" />
               Gnome&apos;s Number
             </div>
-            <div className="text-sm font-mono text-zinc-300 truncate">
+            <div className="text-sm font-bold font-mono text-zinc-300 truncate">
               {call.gnome_number}
             </div>
           </div>
@@ -147,10 +147,13 @@ export const CallBox: React.FC<CallBoxProps> = ({
           <div>
             <div className="text-[10px] text-zinc-500 uppercase flex items-center gap-1">
               <Calendar className="w-3 h-3 text-zinc-400" />
-              Real Time Started
+              Date and Time
             </div>
-            <div className="font-mono text-zinc-400 truncate">
-              {formatStartTime(call.started_at)}
+            <div
+              className="font-mono text-zinc-400 truncate text-[11px]"
+              title={formatCallDateTime(call.started_at)}
+            >
+              {formatCallDateTime(call.started_at)}
             </div>
           </div>
         </div>

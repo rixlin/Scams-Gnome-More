@@ -61,7 +61,7 @@ export const GnomeLiveEditor: React.FC<GnomeLiveEditorProps> = ({
           </span>
         ) : (
           <span className="text-[10px] text-zinc-500 font-mono">
-            Read Only (Call Ended)
+            Read-only (Call Ended)
           </span>
         )}
       </div>

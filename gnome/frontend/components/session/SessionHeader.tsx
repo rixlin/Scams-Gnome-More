@@ -10,10 +10,12 @@ import {
   Clock,
   ShieldAlert,
   AlertTriangle,
+  Calendar,
+  Globe,
 } from "lucide-react";
 import { CallSessionDetail } from "../../lib/types";
 import { useCallDuration } from "../../hooks/useCallDuration";
-import { formatDuration } from "../../lib/utils";
+import { formatDuration, formatCallDateTime } from "../../lib/utils";
 
 interface SessionHeaderProps {
   call: CallSessionDetail;
@@ -60,7 +62,7 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
               {isActive ? (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 animate-pulse">
                   <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  INTERCEPTING LIVE
+                  LIVE
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700/60">
@@ -68,9 +70,20 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
                 </span>
               )}
             </div>
-            <p className="text-xs text-zinc-400">
-              Region: <span className="text-zinc-200">{call.region || "Unknown"}</span>
-            </p>
+            <div className="flex items-center gap-1.5 text-xs text-zinc-400 mt-1 mb-0.5">
+              <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+              <span>Date and Time:</span>
+              <span className="font-mono text-zinc-200 font-medium">
+                {formatCallDateTime(call.started_at)}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-zinc-400 mt-1 mb-0.5">
+              <Globe className="w-3.5 h-3.5 text-zinc-400" />
+              <span>Region:</span>
+              <span className="text-zinc-200">
+                {call.region || "Unknown"}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -106,7 +119,7 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
               <h3 className="text-base font-bold text-zinc-100">Terminate Active Call?</h3>
             </div>
             <p className="text-xs text-zinc-300 leading-relaxed">
-              Are you sure you want to hang up the phone line immediately? This will disconnect the scammer from the Gnome backend.
+              Are you sure you want to hang up the phone line immediately? This will disconnect the scammer from the gnome.
             </p>
             <div className="flex justify-end gap-3 pt-2">
               <button

@@ -116,8 +116,27 @@ export async function terminateCall(
         "gnome_debug_calls",
         JSON.stringify(updatedCalls)
       );
+
+      // Record in terminated overrides map so real or debug calls reflect as ended across all pages
+      const terminatedMap = JSON.parse(
+        window.localStorage.getItem("gnome_terminated_calls") || "{}"
+      );
+      const startMs = storedDetails[id]
+        ? new Date(storedDetails[id].started_at).getTime()
+        : Date.now();
+      const dur = Math.max(1, Math.floor((Date.now() - startMs) / 1000));
+      terminatedMap[id] = {
+        status: "ended",
+        ended_at: nowIso,
+        duration_seconds: dur,
+      };
+      window.localStorage.setItem(
+        "gnome_terminated_calls",
+        JSON.stringify(terminatedMap)
+      );
+
       window.dispatchEvent(new Event("gnome_calls_updated"));
-      if (storedDetails[id]) {
+      if (storedDetails[id] || id.startsWith("call-debug")) {
         return { success: true };
       }
     } catch {
@@ -161,8 +180,20 @@ export async function deleteCall(
         "gnome_debug_calls",
         JSON.stringify(remainingCalls)
       );
+
+      const terminatedMap = JSON.parse(
+        window.localStorage.getItem("gnome_terminated_calls") || "{}"
+      );
+      if (terminatedMap[id]) {
+        delete terminatedMap[id];
+        window.localStorage.setItem(
+          "gnome_terminated_calls",
+          JSON.stringify(terminatedMap)
+        );
+      }
+
       window.dispatchEvent(new Event("gnome_calls_updated"));
-      if (storedDetails[id]) {
+      if (storedDetails[id] || id.startsWith("call-debug")) {
         return { success: true };
       }
     } catch {

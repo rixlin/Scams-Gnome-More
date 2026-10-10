@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Shield, Settings as SettingsIcon, Activity } from "lucide-react";
 import { SettingsModal } from "../settings/SettingsModal";
@@ -11,8 +11,38 @@ interface NavbarProps {
   onAddDebugCall?: (call: CallSessionSummary) => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ activeCount = 0, onAddDebugCall }) => {
+export const Navbar: React.FC<NavbarProps> = ({
+  activeCount: propActiveCount,
+  onAddDebugCall,
+}) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [localActiveCount, setLocalActiveCount] = useState<number>(0);
+
+  useEffect(() => {
+    const updateCount = () => {
+      if (typeof window !== "undefined") {
+        try {
+          const stored = JSON.parse(
+            window.localStorage.getItem("gnome_debug_calls") || "[]"
+          );
+          const active = stored.filter(
+            (c: CallSessionSummary) => c.status === "active"
+          ).length;
+          setLocalActiveCount(active);
+        } catch {}
+      }
+    };
+    updateCount();
+    window.addEventListener("gnome_calls_updated", updateCount);
+    window.addEventListener("storage", updateCount);
+    return () => {
+      window.removeEventListener("gnome_calls_updated", updateCount);
+      window.removeEventListener("storage", updateCount);
+    };
+  }, []);
+
+  const activeCount =
+    propActiveCount !== undefined ? propActiveCount : localActiveCount;
 
   return (
     <>
