@@ -304,3 +304,89 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
+
+/* ==========================================================================
+   ANIMATIONS: Dialog/Pop-up Subtle Protrude Zoom & Page Transitions
+   ========================================================================== */
+
+/* Dialogs & Pop-ups: Zoom in from ~94% (subtle scale protrude, not 0%) */
+@keyframes dialogZoomIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes dropdownZoomIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes overlayFadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Page Navigation: Fade current page to nothing, then fade in next page */
+@keyframes pageFadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes pageFadeOut {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.animate-dialog-zoom {
+  animation: dialogZoomIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-dropdown-zoom {
+  animation: dropdownZoomIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-overlay-fade {
+  animation: overlayFadeIn 0.2s ease-out forwards;
+}
+
+.animate-page-fade-in {
+  animation: pageFadeIn 0.22s ease-out forwards;
+}
+
+.animate-page-fade-out {
+  animation: pageFadeOut 0.16s ease-in forwards;
+}
+
+/* Native Browser View Transitions fallback */
+@view-transition {
+  navigation: auto;
+}
+::view-transition-old(root) {
+  animation: 160ms ease-out both pageFadeOut;
+}
+::view-transition-new(root) {
+  animation: 220ms ease-in both pageFadeIn;
+}

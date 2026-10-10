@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Shield, Settings as SettingsIcon, Activity } from "lucide-react";
 import { SettingsModal } from "../settings/SettingsModal";
 import { CallSessionSummary } from "../../lib/types";
+import { checkBackendHealth } from "../../lib/api";
 
 interface NavbarProps {
   activeCount?: number;
@@ -17,6 +18,29 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [localActiveCount, setLocalActiveCount] = useState<number>(0);
+  const [backendStatus, setBackendStatus] = useState<"ready" | "unreachable">("unreachable");
+
+  useEffect(() => {
+    let isMounted = true;
+    const verifyHealth = async () => {
+      try {
+        const isHealthy = await checkBackendHealth();
+        if (isMounted) {
+          setBackendStatus(isHealthy ? "ready" : "unreachable");
+        }
+      } catch {
+        if (isMounted) {
+          setBackendStatus("unreachable");
+        }
+      }
+    };
+    verifyHealth();
+    const interval = setInterval(verifyHealth, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     const updateCount = () => {
@@ -56,7 +80,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-base text-zinc-100 tracking-tight">
-                  GNOME
+                  GnomeGrove
                 </span>
                 <span className="text-xs px-2 py-0.5 rounded bg-zinc-800 font-mono text-zinc-400 border border-zinc-700/60">
                   DEFENSE OPS
@@ -79,10 +103,39 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             </div>
 
+            {/* Backend Health Status (Between Active Gnomes and Settings) */}
+            <div
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 border text-xs transition-colors ${
+                backendStatus === "ready"
+                  ? "border-emerald-500/30 text-emerald-400"
+                  : "border-red-500/30 text-red-400"
+              }`}
+              title={
+                backendStatus === "ready"
+                  ? "Backend server is healthy and responding"
+                  : "Backend server is offline or unreachable"
+              }
+            >
+              <span className="relative flex h-2 w-2">
+                {backendStatus === "ready" ? (
+                  <>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </>
+                ) : (
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                )}
+              </span>
+              <span className="text-zinc-400">Backend:</span>
+              <span className="font-semibold font-mono">
+                {backendStatus === "ready" ? "Ready" : "Unreachable"}
+              </span>
+            </div>
+
             {/* Settings Trigger */}
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-xs text-zinc-300 font-medium transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-xs text-zinc-300 font-medium transition-all hover:scale-105 active:scale-95"
               title="Open Settings"
             >
               <SettingsIcon className="w-3.5 h-3.5 text-zinc-400" />

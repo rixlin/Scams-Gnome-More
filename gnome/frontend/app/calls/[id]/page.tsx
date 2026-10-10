@@ -141,7 +141,7 @@ function CallSessionContent() {
             <p className="text-xs text-zinc-400">{error}</p>
             <button
               onClick={() => router.push("/")}
-              className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded-lg"
+              className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded-lg transition-all hover:scale-105 active:scale-95"
             >
               Return to Dashboard
             </button>
@@ -192,7 +192,7 @@ function CallSessionContent() {
             {/* Pinned Button on the Right Side (Visible on mobile / screens < lg) */}
             <button
               onClick={() => setIsMobileDrawerOpen(true)}
-              className="xl:hidden fixed right-0 top-1/2 -translate-y-1/2 z-40 bg-emerald-600 hover:bg-emerald-500 text-white py-3.5 px-2 rounded-l-2xl shadow-2xl flex flex-col items-center gap-2 transition-all font-mono text-xs border-y border-l border-emerald-400/50"
+              className="xl:hidden fixed right-0 top-1/2 -translate-y-1/2 z-40 bg-emerald-600 hover:bg-emerald-500 text-white py-3.5 px-2 rounded-l-2xl shadow-2xl flex flex-col items-center gap-2 transition-all hover:scale-105 active:scale-95 font-mono text-xs border-y border-l border-emerald-400/50"
               title="Open Live Transcript"
             >
               <MessageSquare className="w-4 h-4" />

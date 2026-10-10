@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Radio, Clock, Calendar, User, PhoneCall, ShieldAlert, Check } from "lucide-react";
 import { CallSessionSummary } from "../../lib/types";
 import { useCallDuration } from "../../hooks/useCallDuration";
-import { formatDuration, formatCallDateTime } from "../../lib/utils";
+import { formatDuration, formatCallDateTime, formatRegionWithCountry } from "../../lib/utils";
 
 interface CallBoxProps {
   call: CallSessionSummary;
@@ -76,8 +76,11 @@ export const CallBox: React.FC<CallBoxProps> = ({
               Ended
             </span>
           )}
-          <span className="text-xs text-zinc-400 font-mono">
-            {call.region || "Unknown Region"}
+          <span
+            className="text-xs text-zinc-400 font-mono truncate max-w-[150px]"
+            title={formatRegionWithCountry(call)}
+          >
+            {formatRegionWithCountry(call)}
           </span>
         </div>
 
@@ -88,7 +91,7 @@ export const CallBox: React.FC<CallBoxProps> = ({
               e.stopPropagation();
               onTerminate(call.id);
             }}
-            className="text-xs text-red-400 hover:text-red-300 hover:bg-red-950/40 px-2 py-1 rounded transition-colors"
+            className="text-xs text-red-400 hover:text-red-300 hover:bg-red-950/40 px-2 py-1 rounded transition-all hover:scale-105 active:scale-95"
             title="Terminate this call immediately"
           >
             End Call
@@ -167,7 +170,7 @@ export const CallBox: React.FC<CallBoxProps> = ({
             e.stopPropagation();
             if (onToggleSelect) onToggleSelect(call.id);
           }}
-          className={`w-full text-center py-2 px-3 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
+          className={`w-full text-center py-2 px-3 rounded-lg text-xs font-medium transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5 ${
             isSelected
               ? "bg-emerald-600 text-white font-semibold"
               : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
@@ -178,7 +181,7 @@ export const CallBox: React.FC<CallBoxProps> = ({
       ) : (
         <Link
           href={`/calls/${call.id}`}
-          className={`w-full text-center py-2 px-3 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
+          className={`w-full text-center py-2 px-3 rounded-lg text-xs font-medium transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5 ${
             isActive
               ? "bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-sm"
               : "bg-zinc-800 hover:bg-zinc-700 text-zinc-200"

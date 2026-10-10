@@ -101,12 +101,12 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
             </span>
           )}
           <span className="text-[11px] text-zinc-400 font-mono">
-            {transcript.length} turns
+            {transcript.length} messages
           </span>
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+              className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-all hover:scale-105 active:scale-95"
               title="Close drawer"
             >
               <X className="w-4 h-4" />
@@ -270,7 +270,7 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
             <button
               type="submit"
               disabled={!feedbackInput.trim() || submitting}
-              className="flex items-center justify-center p-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-40 disabled:hover:bg-emerald-600 shrink-0"
+              className="flex items-center justify-center p-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-all hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:active:scale-100 disabled:opacity-40 disabled:hover:bg-emerald-600 shrink-0"
               title="Send prompt injection"
             >
               {submitting ? (

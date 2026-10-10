@@ -116,6 +116,7 @@ export function createSampleDebugCallDetail(
     id: summary.id,
     scammer_number: summary.scammer_number,
     region: summary.region,
+    country: summary.country,
     gnome_number: summary.gnome_number,
     gnome: {
       name: summary.gnome_name || "Gnome Barnaby",

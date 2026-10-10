@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { CallSessionDetail } from "../../lib/types";
 import { useCallDuration } from "../../hooks/useCallDuration";
-import { formatDuration, formatCallDateTime } from "../../lib/utils";
+import { formatDuration, formatCallDateTime, formatRegionWithCountry } from "../../lib/utils";
 
 interface SessionHeaderProps {
   call: CallSessionDetail;
@@ -81,7 +81,7 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
               <Globe className="w-3.5 h-3.5 text-zinc-400" />
               <span>Region:</span>
               <span className="text-zinc-200">
-                {call.region || "Unknown"}
+                {formatRegionWithCountry(call)}
               </span>
             </div>
           </div>
@@ -101,7 +101,7 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
             <button
               onClick={() => setShowConfirm(true)}
               disabled={isTerminating}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold shadow-md transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold shadow-md transition-all hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:active:scale-100 disabled:opacity-50"
             >
               <PhoneOff className="w-3.5 h-3.5" />
               {isTerminating ? "Terminating..." : "Terminate Call"}
@@ -112,8 +112,8 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
 
       {/* Confirmation Modal */}
       {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px]">
-          <div className="w-full max-w-md bg-zinc-900 border border-red-800/80 rounded-2xl p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px] animate-overlay-fade">
+          <div className="w-full max-w-md bg-zinc-900 border border-red-800/80 rounded-2xl p-6 shadow-2xl space-y-4 animate-dialog-zoom">
             <div className="flex items-center gap-3 text-red-400">
               <AlertTriangle className="w-6 h-6" />
               <h3 className="text-base font-bold text-zinc-100">Terminate Active Call?</h3>
@@ -124,13 +124,13 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
             <div className="flex justify-end gap-3 pt-2">
               <button
                 onClick={() => setShowConfirm(false)}
-                className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200"
+                className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-all hover:scale-105 active:scale-95"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmTerminate}
-                className="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold"
+                className="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold shadow-md transition-all hover:scale-105 active:scale-95"
               >
                 Yes, Terminate Now
               </button>

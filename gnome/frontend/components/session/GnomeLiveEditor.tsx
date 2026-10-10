@@ -53,14 +53,14 @@ export const GnomeLiveEditor: React.FC<GnomeLiveEditorProps> = ({
       <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
         <div className="flex items-center gap-2">
           <Sliders className="w-4 h-4 text-emerald-400" />
-          <h3 className="text-sm font-bold text-zinc-100">Gnome Persona &amp; Demeanor</h3>
+          <h3 className="text-sm font-bold text-zinc-100">Gnome Persona</h3>
         </div>
         {isCallActive ? (
-          <span className="text-[10px] text-emerald-400 font-mono px-2 py-0.5 rounded bg-emerald-950/40 border border-emerald-800/40">
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
             Live Edits Enabled
           </span>
         ) : (
-          <span className="text-[10px] text-zinc-500 font-mono">
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60">
             Read-only (Call Ended)
           </span>
         )}
@@ -116,7 +116,7 @@ export const GnomeLiveEditor: React.FC<GnomeLiveEditorProps> = ({
           <button
             type="submit"
             disabled={submitting}
-            className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-colors disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-all hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:active:scale-100 disabled:opacity-50"
           >
             {submitting ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin" />

@@ -17,6 +17,7 @@ export interface CallSessionSummary {
   id: string;
   scammer_number: string;
   region: string;
+  country?: string;
   gnome_number: string; // The specific virtual Twilio phone number provided by backend
   gnome_name: string; // Name of gnome assigned
   started_at: string;
@@ -24,7 +25,7 @@ export interface CallSessionSummary {
   duration_seconds: number;
   status: "active" | "ended";
   recording_url?: string | null;
-  recording_status?: "available" | "unavailable" | "deleted";
+  recording_status?: "available" | "unavailable";
 }
 
 export interface GnomeProfile {
@@ -47,6 +48,7 @@ export interface CallSessionDetail {
   id: string;
   scammer_number: string;
   region: string;
+  country?: string;
   gnome_number: string;
   gnome: GnomeProfile;
   started_at: string;
@@ -54,7 +56,7 @@ export interface CallSessionDetail {
   duration_seconds: number;
   status: "active" | "ended";
   recording_url?: string | null;
-  recording_status?: "available" | "unavailable" | "deleted";
+  recording_status?: "available" | "unavailable";
   transcript: TranscriptTurn[];
 }
 

@@ -17,6 +17,29 @@ const getBaseUrl = (): string => {
   return process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 };
 
+export async function checkBackendHealth(): Promise<boolean> {
+  const baseUrl = getBaseUrl();
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch(`${baseUrl}/api/health`, {
+      method: "GET",
+      signal: controller.signal,
+      cache: "no-store",
+    }).catch(async () => {
+      return await fetch(`${baseUrl}/api/calls`, {
+        method: "GET",
+        signal: controller.signal,
+        cache: "no-store",
+      });
+    });
+    clearTimeout(timeoutId);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function fetchCallSessions(): Promise<CallSessionSummary[]> {
   const baseUrl = getBaseUrl();
   const res = await fetch(`${baseUrl}/api/calls`, {

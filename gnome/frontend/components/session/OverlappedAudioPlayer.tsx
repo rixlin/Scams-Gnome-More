@@ -91,7 +91,6 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
   const isRecordingUnavailable =
     isDebugCall ||
     call?.recording_status === "unavailable" ||
-    call?.recording_status === "deleted" ||
     !call?.recording_url;
 
   const initialRecordedDuration = call?.duration_seconds || 145;
@@ -161,16 +160,18 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
       return (
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-lg space-y-4">
           {/* Header */}
-          <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+          <div className="flex items-center justify-between min-h-[40px] pb-3 border-b border-zinc-800">
             <div className="flex items-center gap-2.5">
               <FileAudio className="w-4 h-4 text-zinc-400" />
               <h3 className="text-sm font-bold text-zinc-100">
-                Call Recording Playback
+                Call Audio Playback
               </h3>
             </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60">
-              Recording Offline
-            </span>
+            <div className="flex items-center min-h-[28px]">
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60 leading-none">
+                Recording Unavailable
+              </span>
+            </div>
           </div>
 
           {/* Unavailable Message Box */}
@@ -184,10 +185,8 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
               </div>
               <p className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
                 {isDebugCall
-                  ? "Simulated debug preview calls do not retain encoded audio recordings in storage."
-                  : call?.recording_status === "deleted"
-                  ? "The audio recording for this session was permanently deleted from the recording archive."
-                  : "The encoded single-file stereo audio for this interception session is no longer available or was purged upon call completion."}
+                  ? "Debug calls are simulated and are not recorded."
+                  : "The audio recording for this session is no longer available."}
               </p>
             </div>
           </div>
@@ -199,16 +198,18 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
     return (
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-lg space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+        <div className="flex items-center justify-between min-h-[40px] pb-3 border-b border-zinc-800">
           <div className="flex items-center gap-2.5">
             <FileAudio className="w-4 h-4 text-emerald-400" />
             <h3 className="text-sm font-bold text-zinc-100">
-              Encoded Call Recording Playback
+              Call Audio Playback
             </h3>
           </div>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-            Single-File Encoded (Stereo)
-          </span>
+          <div className="flex items-center min-h-[28px]">
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 leading-none">
+              Recording Available
+            </span>
+          </div>
         </div>
 
         {/* Audio Element */}
@@ -248,7 +249,7 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => handleSkipRecorded(-10)}
-                className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-zinc-100 transition-colors"
+                className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-zinc-100 transition-all hover:scale-105 active:scale-95"
                 title="Rewind 10 seconds"
               >
                 <RotateCcw className="w-4 h-4" />
@@ -268,7 +269,7 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
 
               <button
                 onClick={() => handleSkipRecorded(10)}
-                className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-zinc-100 transition-colors"
+                className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-zinc-100 transition-all hover:scale-105 active:scale-95"
                 title="Forward 10 seconds"
               >
                 <RotateCw className="w-4 h-4" />
@@ -280,7 +281,7 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setIsRecordedMuted((prev) => !prev)}
-                  className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100"
+                  className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100 transition-all hover:scale-105 active:scale-95"
                   title={isRecordedMuted ? "Unmute" : "Mute"}
                 >
                   {isRecordedMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -328,43 +329,45 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-lg space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+      <div className="flex items-center justify-between min-h-[40px] pb-3 border-b border-zinc-800">
         <div className="flex items-center gap-2.5">
-          <Headphones className="w-4 h-4 text-emerald-400" />
+          <FileAudio className="w-4 h-4 text-emerald-400" />
           <h3 className="text-sm font-bold text-zinc-100">
-            Call Audio Streaming
+            Call Audio Playback
           </h3>
         </div>
 
-        <div className="flex items-center gap-2">
-          {isListening && (
+        {/* When paused (!isListening): hide mute/unmute icon, show "Streaming" label */}
+        {/* When unpaused (isListening): hide "Streaming" label, restore pause button and mute/unmute icon */}
+        {!isListening ? (
+          <div className="flex items-center min-h-[28px]">
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              Streaming
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 min-h-[28px]">
             <button
               onClick={handlePauseListening}
-              className="flex items-center gap-1.5 text-xs bg-red-600 hover:bg-red-500 text-white border border-red-500 px-2.5 py-1 rounded-lg transition-colors shadow-md font-semibold"
+              className="h-7 flex items-center gap-1.5 text-xs bg-red-600 hover:bg-red-500 text-white border border-red-500 px-2.5 rounded-lg transition-all hover:scale-105 active:scale-95 shadow-md font-semibold"
             >
               <Pause className="w-3.5 h-3.5" />
               <span>Pause Stream</span>
             </button>
-          )}
 
-          <button
-            onClick={() => {
-              if (!isListening) {
-                handleStartListening();
-              } else {
-                toggleMute();
-              }
-            }}
-            className={`p-1.5 rounded-lg border transition-colors ${
-              isMuted
-                ? "bg-red-950/40 border-red-800/80 text-red-400"
-                : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-zinc-100"
-            }`}
-            title={isMuted ? "Unmute audio wiretap" : "Mute wiretap"}
-          >
-            {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-          </button>
-        </div>
+            <button
+              onClick={toggleMute}
+              className={`w-7 h-7 flex items-center justify-center rounded-lg border transition-all hover:scale-105 active:scale-95 ${
+                isMuted
+                  ? "bg-red-950/40 border-red-800/80 text-red-400"
+                  : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-zinc-100"
+              }`}
+              title={isMuted ? "Unmute audio wiretap" : "Mute wiretap"}
+            >
+              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Dual Channels Container with Default Blur Overlay */}
@@ -494,7 +497,7 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
       </div>
 
       <div className="text-[11px] text-zinc-500 text-center font-mono">
-        Streams are overlapped. Caller and gnome streams are played independently.
+        Streams are simultaneously overlapped. Caller and gnome streams are not re-encoded.
       </div>
     </div>
   );
