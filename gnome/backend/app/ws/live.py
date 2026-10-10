@@ -10,7 +10,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
-from app.api.deps import token_ok
 from app.core import registry
 from app.core.hub import ACTIVE_CHANNEL, hub
 from app.core.session import CallSession
@@ -53,11 +52,7 @@ async def _pump(ws: WebSocket, channel: str, snapshot: list[str]) -> None:
 
 
 @router.websocket("/ws/live/{channel}")
-async def live(ws: WebSocket, channel: str, token: str | None = None) -> None:
-    if not token_ok(token):
-        await ws.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
-
+async def live(ws: WebSocket, channel: str) -> None:
     if channel == ACTIVE_CHANNEL:
         await ws.accept()
         snapshot = [

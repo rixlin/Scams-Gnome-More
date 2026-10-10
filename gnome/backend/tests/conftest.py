@@ -2,7 +2,6 @@ import os
 
 # Must be set before app.config is first used
 os.environ.update({
-    "API_TOKEN": "test-token",
     "TWILIO_VALIDATE_SIGNATURE": "false",
     "DATABASE_URL": "PLACEHOLDER_DATABASE_URL",
     "PUBLIC_BASE_URL": "https://gnome.test",
@@ -15,8 +14,6 @@ from app.agent.gnome import GnomeAgent  # noqa: E402
 from app.agent.prompts import FALLBACK_PERSONA  # noqa: E402
 from app.core import lifecycle  # noqa: E402
 from app.main import app  # noqa: E402
-
-AUTH = {"Authorization": "Bearer test-token"}
 
 
 @pytest.fixture

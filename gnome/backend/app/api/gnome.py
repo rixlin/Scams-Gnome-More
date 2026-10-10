@@ -2,15 +2,14 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from app.agent import prompts
-from app.api.deps import require_token
 from app.core import registry
 from app.core.session import CallSession
 from app.models import FeedbackIn, PersonalityIn
 
-router = APIRouter(prefix="/api/calls/{call_id}/gnome", tags=["gnome"], dependencies=[Depends(require_token)])
+router = APIRouter(prefix="/api/calls/{call_id}/gnome", tags=["gnome"])
 
 
 def _live_session(call_id: UUID) -> CallSession:

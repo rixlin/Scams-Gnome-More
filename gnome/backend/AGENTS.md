@@ -60,7 +60,6 @@ gnome/backend/
 ## Configuration (`.env`, git-ignored)
 ```
 PUBLIC_BASE_URL=https://gnome.example.com      # Cloudflare tunnel hostname
-API_TOKEN=...                                   # shared bearer token for frontend REST + WS
 TWILIO_ACCOUNT_SID=... TWILIO_AUTH_TOKEN=... TWILIO_PHONE_NUMBER=+1...
 GEMINI_API_KEY=...  GEMINI_MODEL=...            # Live-capable model
 ELEVENLABS_API_KEY=...  ELEVENLABS_VOICE_ID=... ELEVENLABS_MODEL=eleven_flash_v2_5
@@ -68,7 +67,7 @@ DATABASE_URL=postgres://...                     # Tiger Data service URL (sslmod
 ```
 
 ## REST API (FastAPI)
-All `/api/*` routes need `Authorization: Bearer $API_TOKEN`. `/twilio/*` routes check the `X-Twilio-Signature` header instead.
+The `/api/*` routes and the `/ws/live` feed have no authentication, so anyone who has the tunnel URL can reach them. `/twilio/*` routes check the `X-Twilio-Signature` header.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -92,7 +91,7 @@ All `/api/*` routes need `Authorization: Bearer $API_TOKEN`. `/twilio/*` routes 
 - **Outgoing audio:** ElevenLabs TTS with `output_format=ulaw_8000` produces bytes Twilio can play directly. Base64-encode them and send `{"event":"media","streamSid":..., "media":{"payload":...}}`, then a `mark` at the end of each gnome utterance so we know when playback finished.
 - **Barge-in:** when the caller starts talking while the gnome is speaking, send `{"event":"clear","streamSid":...}` and cancel the TTS stream. Interrupting is optional, though. The gnome talking over the scammer is in character.
 
-### `/ws/live/{call_id}`: frontend live feed (server → client; auth via `?token=`)
+### `/ws/live/{call_id}`: frontend live feed (server → client)
 Each message is JSON `{type, ts, data}`:
 - `call.started`: call_id, caller number, **gnome name + backstory + personality** (which gnome is talking)
 - `audio.caller` / `audio.gnome`: base64 PCM16 chunks for live playback and recording on the frontend (incoming audio / gnome response audio)
@@ -158,7 +157,7 @@ CREATE TABLE settings (key TEXT PRIMARY KEY, value JSONB NOT NULL);
 Required fields map to: which gnome is talking → `utterances.gnome_id`/`calls.gnome_id`; AI-generated backstory and gnome name → `gnomes`; who was talking and what they said → `utterances.speaker/text`; call audio → `call_audio.audio`. A 10-minute 8 kHz stereo call is about 19 MB, which fits in Postgres. Move audio to object storage later if needed.
 
 ## Build order (milestones)
-1. **Skeleton:** FastAPI app, config, `/health`, bearer auth, `requirements.txt`, `.env.example`. Run behind `cloudflared tunnel --url http://localhost:8000`.
+1. **Skeleton:** FastAPI app, config, `/health`, `requirements.txt`, `.env.example`. Run behind `cloudflared tunnel --url http://localhost:8000`.
 2. **Twilio echo:** `/twilio/voice` TwiML + `/ws/twilio` that echoes caller audio back. Proves the tunnel, the WSS connection and the μ-law handling.
 3. **Voice out:** ElevenLabs TTS says a fixed greeting into the call.
 4. **Brain:** Gemini Live loop with persona generation and the prompt. A full conversation works.
@@ -190,7 +189,7 @@ Environment notes:
 ## Verification
 - `uvicorn app.main:app --reload` + `cloudflared tunnel --url http://localhost:8000`. Point the Twilio number's Voice webhook at `https://<tunnel>/twilio/voice`.
 - Call the Twilio number (or forward a phone to it). You should hear the gnome greet you and reply in conversation.
-- `websocat "wss://<tunnel>/ws/live/active?token=..."` shows `call.started`, `transcript` and `telemetry` events streaming.
+- `websocat "wss://<tunnel>/ws/live/active"` shows `call.started`, `transcript` and `telemetry` events streaming.
 - `curl -X POST .../api/calls/{id}/gnome/feedback` changes the next reply. `.../terminate` hangs up the call.
 - After hangup, `GET /api/calls/{id}` returns the gnome, transcript and audio, and the rows exist in Tiger Data.
 - `pytest`: unit tests for the audio codec helpers, the persona JSON parsing, the end-of-call persistence (test DB) and the REST routes (`TestClient`).

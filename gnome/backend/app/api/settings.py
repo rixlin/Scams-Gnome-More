@@ -1,12 +1,11 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
-from app.api.deps import require_token
 from app.core import settings_store
 from app.models import SettingsUpdate
 
-router = APIRouter(prefix="/api/settings", tags=["settings"], dependencies=[Depends(require_token)])
+router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
 @router.get("")

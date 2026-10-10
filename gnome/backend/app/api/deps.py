@@ -1,24 +1,9 @@
-"""Auth: bearer token for the frontend, signature validation for Twilio."""
+"""Request validation for Twilio webhooks."""
 
-import hmac
-
-from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import HTTPException, Request, status
 from twilio.request_validator import RequestValidator
 
 from app.config import get_config
-
-_bearer = HTTPBearer(auto_error=False)
-
-
-def token_ok(token: str | None) -> bool:
-    return token is not None and hmac.compare_digest(token, get_config().api_token)
-
-
-def require_token(creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> None:
-    if creds is None or not token_ok(creds.credentials):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid or missing token")
-
 
 async def twilio_form(request: Request) -> dict[str, str]:
     """Parse a Twilio webhook form body and verify X-Twilio-Signature.

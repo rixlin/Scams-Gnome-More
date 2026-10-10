@@ -2,14 +2,13 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 
-from app.api.deps import require_token
 from app.core import lifecycle, registry
 from app.db import repo
 from app.models import ActiveCall, CallDetail, CallSummary
 
-router = APIRouter(prefix="/api/calls", tags=["calls"], dependencies=[Depends(require_token)])
+router = APIRouter(prefix="/api/calls", tags=["calls"])
 
 
 def _db_errors(exc: repo.DatabaseUnavailable) -> HTTPException:

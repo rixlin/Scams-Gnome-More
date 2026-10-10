@@ -16,8 +16,6 @@ class Config(BaseSettings):
 
     # Public hostname from the Cloudflare tunnel, e.g. https://gnome.example.com
     public_base_url: str = "http://localhost:8000"
-    # Shared bearer token the frontend uses for REST and ?token= on WebSockets
-    api_token: str = "PLACEHOLDER_API_TOKEN"
 
     twilio_account_sid: str = "PLACEHOLDER_TWILIO_ACCOUNT_SID"
     twilio_auth_token: str = "PLACEHOLDER_TWILIO_AUTH_TOKEN"
