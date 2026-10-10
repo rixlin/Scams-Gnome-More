@@ -284,3 +284,51 @@ async def hangup_call(call_sid: str):
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+# ---------------------------------------------------------------------------
+# Direct Chat Testing Endpoints (No phone call required)
+# ---------------------------------------------------------------------------
+
+_chat_agents: dict[str, AttackAgent] = {}
+
+
+@app.post("/chat/start")
+async def chat_start(request: Request):
+    """
+    Initialize a text chat session with the Attack Agent.
+    Body JSON: {"difficulty": 3}
+    """
+    body = await request.json()
+    difficulty = int(body.get("difficulty", 3))
+    session_id = str(uuid.uuid4())
+    agent = AttackAgent(difficulty=difficulty)
+    _chat_agents[session_id] = agent
+    return {"session_id": session_id, "opening_line": agent.opening_line}
+
+
+@app.post("/chat/message")
+async def chat_message(request: Request):
+    """
+    Send a message to the Attack Agent and receive its response.
+    Body JSON: {"session_id": "...", "message": "..."}
+    """
+    body = await request.json()
+    session_id = body.get("session_id", "")
+    user_msg = body.get("message", "").strip()
+
+    agent = _chat_agents.get(session_id)
+    if not agent:
+        # Fallback: create on the fly with medium difficulty
+        agent = AttackAgent(difficulty=3)
+        _chat_agents[session_id] = agent
+
+    behavior = _interpreter.classify_turn(user_msg)
+    agent.take_input(user_msg)
+    reply = agent.give_output()
+
+    return {
+        "reply": reply,
+        "behavior": behavior.value if hasattr(behavior, "value") else str(behavior),
+    }
+
+
+

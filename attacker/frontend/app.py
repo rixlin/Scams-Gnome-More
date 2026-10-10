@@ -123,94 +123,184 @@ if hangup_call and st.session_state.active_call_sid:
         st.sidebar.error(f"Error terminating call: {exc}")
 
 # ---------------------------------------------------------------------------
-# Main area
+# Session state for Text Chat testing
 # ---------------------------------------------------------------------------
 
-st.title("Attack Agent — Live Dashboard")
-
-col_status, col_btn_hangup, col_timer = st.columns([2, 1, 1])
-
-with col_status:
-    if st.session_state.active_call_sid:
-        st.info(f"📞 Active call: `{st.session_state.active_call_sid}`")
-    else:
-        st.warning("No active call. Use the sidebar to start one.")
-
-with col_btn_hangup:
-    if st.session_state.active_call_sid:
-        if st.button("🛑 End Call", key="main_hangup", type="secondary", use_container_width=True):
-            try:
-                requests.post(f"{BACKEND_URL}/calls/{st.session_state.active_call_sid}/hangup", timeout=10)
-                st.session_state.active_call_sid = None
-                st.session_state.call_start_time = None
-                st.rerun()
-            except Exception as exc:
-                st.error(f"Error ending call: {exc}")
-
-with col_timer:
-    if st.session_state.call_start_time:
-        elapsed = int(time.time() - st.session_state.call_start_time)
-        mins, secs = divmod(elapsed, 60)
-        st.metric("Call Duration", f"{mins:02d}:{secs:02d}")
-    else:
-        st.metric("Call Duration", "--:--")
-
-st.markdown("---")
+if "chat_session_id" not in st.session_state:
+    st.session_state.chat_session_id = None
+if "chat_messages" not in st.session_state:
+    st.session_state.chat_messages = []
 
 # ---------------------------------------------------------------------------
-# Live transcript
+# Main tabs
 # ---------------------------------------------------------------------------
 
-st.subheader("📝 Live Transcript")
+tab_call, tab_chat = st.tabs(["📞 Phone Call Dashboard", "💬 Text Chat Tester (Direct Testing)"])
 
-transcript_container = st.container()
+with tab_call:
+    st.header("Attack Agent — Live Call Dashboard")
 
-if st.session_state.active_call_sid:
-    try:
-        resp = requests.get(
-            f"{BACKEND_URL}/calls/{st.session_state.active_call_sid}/transcript",
-            timeout=5,
-        )
-        data = resp.json()
-        turns = data.get("turns", [])
-        if turns:
-            for t in turns:
-                speaker = "🤖 Agent" if t["speaker"] == "agent" else "👤 Target"
-                behavior_tag = ""
-                if t.get("behavior") and t["behavior"] != "unknown":
-                    behavior_tag = f"  _[{t['behavior']}]_"
-                transcript_container.markdown(f"**{speaker}:** {t['text']}{behavior_tag}")
+    col_status, col_btn_hangup, col_timer = st.columns([2, 1, 1])
+
+    with col_status:
+        if st.session_state.active_call_sid:
+            st.info(f"📞 Active call: `{st.session_state.active_call_sid}`")
         else:
-            transcript_container.caption("Waiting for conversation to begin…")
+            st.warning("No active call. Use the sidebar to start one.")
 
-        # Auto-refresh
-        if data.get("status") == "in-progress":
-            time.sleep(2)
-            st.rerun()
-    except requests.ConnectionError:
-        transcript_container.error("Cannot connect to backend. Is the server running?")
-    except Exception as exc:
-        transcript_container.error(f"Error fetching transcript: {exc}")
-else:
-    transcript_container.caption("Start a call to see the live transcript.")
+    with col_btn_hangup:
+        if st.session_state.active_call_sid:
+            if st.button("🛑 End Call", key="main_hangup", type="secondary", use_container_width=True):
+                try:
+                    requests.post(f"{BACKEND_URL}/calls/{st.session_state.active_call_sid}/hangup", timeout=10)
+                    st.session_state.active_call_sid = None
+                    st.session_state.call_start_time = None
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Error ending call: {exc}")
 
-# ---------------------------------------------------------------------------
-# Call history
-# ---------------------------------------------------------------------------
+    with col_timer:
+        if st.session_state.call_start_time:
+            elapsed = int(time.time() - st.session_state.call_start_time)
+            mins, secs = divmod(elapsed, 60)
+            st.metric("Call Duration", f"{mins:02d}:{secs:02d}")
+        else:
+            st.metric("Call Duration", "--:--")
 
-st.markdown("---")
-st.subheader("📋 Call History")
+    st.markdown("---")
 
-try:
-    resp = requests.get(f"{BACKEND_URL}/calls", timeout=5)
-    calls = resp.json()
-    if calls:
-        for sid, info in calls.items():
-            with st.expander(f"Call {sid} — {info.get('status', 'unknown')}"):
-                st.json(info)
+    # Live transcript
+    st.subheader("📝 Live Transcript")
+
+    transcript_container = st.container()
+
+    if st.session_state.active_call_sid:
+        try:
+            resp = requests.get(
+                f"{BACKEND_URL}/calls/{st.session_state.active_call_sid}/transcript",
+                timeout=5,
+            )
+            data = resp.json()
+            turns = data.get("turns", [])
+            if turns:
+                for t in turns:
+                    speaker = "🤖 Agent" if t["speaker"] == "agent" else "👤 Target"
+                    behavior_tag = ""
+                    if t.get("behavior") and t["behavior"] != "unknown":
+                        behavior_tag = f"  _[{t['behavior']}]_"
+                    transcript_container.markdown(f"**{speaker}:** {t['text']}{behavior_tag}")
+            else:
+                transcript_container.caption("Waiting for conversation to begin…")
+
+            # Auto-refresh
+            if data.get("status") == "in-progress":
+                time.sleep(2)
+                st.rerun()
+        except requests.ConnectionError:
+            transcript_container.error("Cannot connect to backend. Is the server running?")
+        except Exception as exc:
+            transcript_container.error(f"Error fetching transcript: {exc}")
     else:
-        st.caption("No calls recorded yet.")
-except requests.ConnectionError:
-    st.caption("Backend not available.")
-except Exception:
-    st.caption("Could not load call history.")
+        transcript_container.caption("Start a call to see the live transcript.")
+
+    # Call history
+    st.markdown("---")
+    st.subheader("📋 Call History")
+
+    try:
+        resp = requests.get(f"{BACKEND_URL}/calls", timeout=5)
+        calls = resp.json()
+        if calls:
+            for sid, info in calls.items():
+                with st.expander(f"Call {sid} — {info.get('status', 'unknown')}"):
+                    st.json(info)
+        else:
+            st.caption("No calls recorded yet.")
+    except requests.ConnectionError:
+        st.caption("Backend not available.")
+    except Exception:
+        st.caption("Could not load call history.")
+
+with tab_chat:
+    st.header("💬 Direct Text Chat Simulation")
+    st.caption("Test the attacker's responses, tactics, and difficulty levels via direct text — no Twilio or phone call required.")
+
+    col_chat_ctrl1, col_chat_ctrl2 = st.columns([3, 1])
+    with col_chat_ctrl1:
+        st.info(f"Active Difficulty: **{difficulty_labels[difficulty]} (Level {difficulty})**")
+    with col_chat_ctrl2:
+        if st.button("🔄 Reset Chat Session", use_container_width=True):
+            try:
+                resp = requests.post(
+                    f"{BACKEND_URL}/chat/start",
+                    json={"difficulty": difficulty},
+                    timeout=5,
+                )
+                if resp.ok:
+                    data = resp.json()
+                    st.session_state.chat_session_id = data.get("session_id")
+                    st.session_state.chat_messages = [
+                        {"role": "assistant", "content": data.get("opening_line", ""), "behavior": None}
+                    ]
+                    st.rerun()
+            except Exception as exc:
+                st.error(f"Failed to reset chat: {exc}")
+
+    # Auto-initialize session if none exists
+    if not st.session_state.chat_session_id:
+        try:
+            resp = requests.post(
+                f"{BACKEND_URL}/chat/start",
+                json={"difficulty": difficulty},
+                timeout=5,
+            )
+            if resp.ok:
+                data = resp.json()
+                st.session_state.chat_session_id = data.get("session_id")
+                st.session_state.chat_messages = [
+                    {"role": "assistant", "content": data.get("opening_line", ""), "behavior": None}
+                ]
+        except Exception:
+            pass
+
+    # Display chat conversation
+    for msg in st.session_state.chat_messages:
+        with st.chat_message(msg["role"]):
+            tag = f"  _[Classified: {msg['behavior']}]_" if msg.get("behavior") else ""
+            st.markdown(f"{msg['content']}{tag}")
+
+    # Input box
+    if prompt := st.chat_input("Type your response to the attacker..."):
+        # Append user message
+        st.session_state.chat_messages.append({"role": "user", "content": prompt, "behavior": None})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # Query backend
+        with st.chat_message("assistant"):
+            with st.spinner("Mike is typing..."):
+                try:
+                    resp = requests.post(
+                        f"{BACKEND_URL}/chat/message",
+                        json={
+                            "session_id": st.session_state.chat_session_id,
+                            "message": prompt,
+                        },
+                        timeout=15,
+                    )
+                    if resp.ok:
+                        data = resp.json()
+                        reply = data.get("reply", "")
+                        behavior = data.get("behavior")
+                        tag = f"  _[Classified: {behavior}]_" if behavior and behavior != "unknown" else ""
+                        st.markdown(f"{reply}{tag}")
+                        st.session_state.chat_messages.append({
+                            "role": "assistant",
+                            "content": reply,
+                            "behavior": behavior,
+                        })
+                    else:
+                        st.error(f"Error from server: {resp.text}")
+                except Exception as exc:
+                    st.error(f"Failed to reach backend: {exc}")
+
