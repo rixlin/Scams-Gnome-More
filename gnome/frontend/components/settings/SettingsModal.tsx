@@ -1,0 +1,351 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { X, Settings as SettingsIcon, Check, AlertCircle, RefreshCw, PlusCircle, Server, Bug } from "lucide-react";
+import { fetchSettings, updateSettings } from "../../lib/api";
+import { CallSessionSummary } from "../../lib/types";
+
+interface SettingsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onAddDebugCall?: (call: CallSessionSummary) => void;
+}
+
+export const SettingsModal: React.FC<SettingsModalProps> = ({
+  isOpen,
+  onClose,
+  onAddDebugCall,
+}) => {
+  const [activeTab, setActiveTab] = useState<"system" | "debug">("debug");
+  const [loading, setLoading] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // System Settings state
+  const [backendUrl, setBackendUrl] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.localStorage.getItem("gnome_backend_url") || "http://localhost:8000";
+    }
+    return "http://localhost:8000";
+  });
+
+  const [wsUrl, setWsUrl] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.localStorage.getItem("gnome_ws_url") || "ws://localhost:8000";
+    }
+    return "ws://localhost:8000";
+  });
+
+  const [autoTerminateSeconds, setAutoTerminateSeconds] = useState(1800);
+
+  // Debug Call Form state
+  const [debugScammerNumber, setDebugScammerNumber] = useState("+1 (555) 392-8172");
+  const [debugRegion, setDebugRegion] = useState("New York, NY");
+  const [debugGnomeNumber, setDebugGnomeNumber] = useState("+1 (800) 420-GNOM");
+  const [debugGnomeName, setDebugGnomeName] = useState("Gnome Barnaby");
+  const [debugSuccessMsg, setDebugSuccessMsg] = useState<string | null>(null);
+
+  // Load backend settings on open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let active = true;
+    fetchSettings()
+      .then((settings) => {
+        if (!active) return;
+        if (settings.backend_api_url) setBackendUrl(settings.backend_api_url);
+        if (settings.backend_ws_url) setWsUrl(settings.backend_ws_url);
+        if (settings.auto_terminate_seconds) {
+          setAutoTerminateSeconds(settings.auto_terminate_seconds);
+        }
+      })
+      .catch(() => {
+        // Fall back to default local state if backend is offline
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSaveSystemSettings = async () => {
+    setLoading(true);
+    setErrorMessage(null);
+    setSavedSuccess(false);
+
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("gnome_backend_url", backendUrl);
+        window.localStorage.setItem("gnome_ws_url", wsUrl);
+      }
+
+      await updateSettings({
+        backend_api_url: backendUrl,
+        backend_ws_url: wsUrl,
+        auto_terminate_seconds: autoTerminateSeconds,
+      });
+
+      setSavedSuccess(true);
+      setTimeout(() => {
+        setSavedSuccess(false);
+      }, 3000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to save settings.";
+      setErrorMessage(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateDebugCall = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const newCall: CallSessionSummary = {
+      id: `call-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      scammer_number: debugScammerNumber.trim() || "+1 (555) 000-0000",
+      region: debugRegion.trim() || "Unknown Region",
+      gnome_number: debugGnomeNumber.trim() || "+1 (800) 420-GNOM",
+      gnome_name: debugGnomeName.trim() || "Gnome Defender",
+      started_at: new Date().toISOString(),
+      ended_at: null,
+      duration_seconds: 0,
+      status: "active",
+    };
+
+    if (onAddDebugCall) {
+      onAddDebugCall(newCall);
+    }
+
+    setDebugSuccessMsg(`Active session added: ${newCall.scammer_number}`);
+    setTimeout(() => setDebugSuccessMsg(null), 3000);
+  };
+
+  const handleModalClose = () => {
+    setSavedSuccess(false);
+    setErrorMessage(null);
+    setDebugSuccessMsg(null);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+      <div className="relative w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/60">
+          <div className="flex items-center gap-2.5">
+            <SettingsIcon className="w-5 h-5 text-emerald-400" />
+            <h3 className="text-base font-bold text-zinc-100">Settings</h3>
+          </div>
+          <button
+            onClick={handleModalClose}
+            className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex border-b border-zinc-800 bg-zinc-950/30 px-6 gap-6">
+          <button
+            onClick={() => setActiveTab("debug")}
+            className={`py-3 text-xs font-semibold border-b-2 flex items-center gap-2 transition-colors ${
+              activeTab === "debug"
+                ? "border-emerald-500 text-emerald-400"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <Bug className="w-4 h-4" />
+            Debug &amp; Preview
+          </button>
+          <button
+            onClick={() => setActiveTab("system")}
+            className={`py-3 text-xs font-semibold border-b-2 flex items-center gap-2 transition-colors ${
+              activeTab === "system"
+                ? "border-emerald-500 text-emerald-400"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <Server className="w-4 h-4" />
+            System &amp; Server
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-6 space-y-5 overflow-y-auto flex-1">
+          {errorMessage && (
+            <div className="flex items-center gap-2 p-3 text-xs rounded-lg bg-red-950/40 border border-red-800/60 text-red-300">
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          {savedSuccess && (
+            <div className="flex items-center gap-2 p-3 text-xs rounded-lg bg-emerald-950/40 border border-emerald-800/60 text-emerald-300">
+              <Check className="w-4 h-4 shrink-0 text-emerald-400" />
+              <span>Settings updated successfully.</span>
+            </div>
+          )}
+
+          {debugSuccessMsg && (
+            <div className="flex items-center gap-2 p-3 text-xs rounded-lg bg-emerald-950/40 border border-emerald-800/60 text-emerald-300">
+              <Check className="w-4 h-4 shrink-0 text-emerald-400" />
+              <span>{debugSuccessMsg}</span>
+            </div>
+          )}
+
+          {activeTab === "debug" ? (
+            <div className="space-y-4">
+              <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800/80">
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Manually inject an active call session to preview how the call box looks on the home page and inspect the active card layout. No transcript is provided for now.
+                </p>
+              </div>
+
+              <form onSubmit={handleCreateDebugCall} className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1">
+                      Scammer&apos;s Number
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={debugScammerNumber}
+                      onChange={(e) => setDebugScammerNumber(e.target.value)}
+                      placeholder="+1 (555) 000-0000"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1">
+                      Region
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={debugRegion}
+                      onChange={(e) => setDebugRegion(e.target.value)}
+                      placeholder="e.g. Dallas, TX"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-emerald-500/80"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1">
+                      Gnome&apos;s Virtual Number
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={debugGnomeNumber}
+                      onChange={(e) => setDebugGnomeNumber(e.target.value)}
+                      placeholder="+1 (800) 420-GNOM"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1">
+                      Assigned Gnome Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={debugGnomeName}
+                      onChange={(e) => setDebugGnomeName(e.target.value)}
+                      placeholder="e.g. Gnome Barnaby"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-emerald-500/80"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-colors"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                    Add Active Call Session (Preview)
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Gnome Backend REST URL
+                </label>
+                <input
+                  type="text"
+                  value={backendUrl}
+                  onChange={(e) => setBackendUrl(e.target.value)}
+                  placeholder="http://localhost:8000"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Gnome Backend WebSocket Base URL
+                </label>
+                <input
+                  type="text"
+                  value={wsUrl}
+                  onChange={(e) => setWsUrl(e.target.value)}
+                  placeholder="ws://localhost:8000"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Auto-Terminate Safety Timeout (Seconds)
+                </label>
+                <input
+                  type="number"
+                  value={autoTerminateSeconds}
+                  onChange={(e) => setAutoTerminateSeconds(Number(e.target.value))}
+                  placeholder="1800"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleSaveSystemSettings}
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50"
+                >
+                  {loading ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  Save Server Settings
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-zinc-800 bg-zinc-950/60">
+          <button
+            onClick={handleModalClose}
+            className="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
