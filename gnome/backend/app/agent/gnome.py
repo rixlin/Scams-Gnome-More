@@ -70,8 +70,8 @@ class _Utterance:
     async def _run(self) -> None:
         session = self.agent.session
         cfg = get_config()
-        voice_id = session.voice_id or settings_store.get()["voice_id"] or cfg.elevenlabs_voice_id
-        if is_placeholder(cfg.elevenlabs_api_key) or is_placeholder(voice_id):
+        voice_id = session.voice_id
+        if is_placeholder(cfg.elevenlabs_api_key) or not voice_id:
             # No voice configured: the reply still shows up in the transcript, it just isn't spoken
             self.agent.warn_once("tts", "ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID not set; the gnome can't speak yet")
             session.set_state("listening")

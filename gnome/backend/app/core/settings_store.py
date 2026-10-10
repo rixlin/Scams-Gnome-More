@@ -10,7 +10,7 @@ log = logging.getLogger(__name__)
 
 DEFAULTS: dict[str, Any] = {
     "default_personality": "",
-    "voice_id": None,  # None -> ELEVENLABS_VOICE_ID from .env
+    "voice_id": None,  # None -> random pick from ELEVENLABS_VOICE_ID in .env, per call
     "max_call_seconds": 1800,
     "generate_new_gnome_per_call": True,
     "fixed_gnome": None,

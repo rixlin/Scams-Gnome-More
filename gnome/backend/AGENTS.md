@@ -62,7 +62,7 @@ gnome/backend/
 PUBLIC_BASE_URL=https://gnome.example.com      # Cloudflare tunnel hostname
 TWILIO_ACCOUNT_SID=... TWILIO_AUTH_TOKEN=... TWILIO_PHONE_NUMBER=+1...
 GEMINI_API_KEY=...  GEMINI_MODEL=...            # Live-capable model
-ELEVENLABS_API_KEY=...  ELEVENLABS_VOICE_ID=... ELEVENLABS_MODEL=eleven_flash_v2_5
+ELEVENLABS_API_KEY=...  ELEVENLABS_VOICE_ID=id1,id2,id3 ELEVENLABS_MODEL=eleven_flash_v2_5   # one random voice per call
 DATABASE_URL=postgres://...                     # Tiger Data service URL (sslmode=require)
 ```
 

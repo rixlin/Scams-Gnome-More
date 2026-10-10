@@ -15,6 +15,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent
@@ -61,26 +62,49 @@ def write_env(url: str) -> None:
     ENV_FILE.write_text(text, encoding="utf-8")
 
 
-def update_twilio(url: str) -> None:
+def update_twilio(url: str) -> bool:
+    """Point the Twilio number's webhooks at the tunnel, read them back to confirm. True on success."""
     sys.path.insert(0, str(BACKEND_DIR))
     from app.config import Config, is_placeholder
 
     cfg = Config()
     if any(is_placeholder(v) for v in (cfg.twilio_account_sid, cfg.twilio_auth_token, cfg.twilio_phone_number)):
         print("  Twilio keys not set; skipping webhook update")
-        return
+        return True
     from twilio.rest import Client
 
     client = Client(cfg.twilio_account_sid, cfg.twilio_auth_token)
-    numbers = client.incoming_phone_numbers.list(phone_number=cfg.twilio_phone_number, limit=1)
-    if not numbers:
-        print(f"  Twilio number {cfg.twilio_phone_number} not found on this account; skipping")
-        return
-    numbers[0].update(
-        voice_url=f"{url}/twilio/voice", voice_method="POST",
-        status_callback=f"{url}/twilio/status", status_callback_method="POST",
-    )
-    print(f"  Twilio webhooks for {cfg.twilio_phone_number} now point at the tunnel")
+    want_voice, want_status = f"{url}/twilio/voice", f"{url}/twilio/status"
+    last_error = None
+    for attempt in range(1, 4):
+        try:
+            numbers = client.incoming_phone_numbers.list(phone_number=cfg.twilio_phone_number, limit=1)
+            if not numbers:
+                last_error = f"number {cfg.twilio_phone_number} not found on this Twilio account"
+                break
+            numbers[0].update(
+                voice_url=want_voice, voice_method="POST",
+                status_callback=want_status, status_callback_method="POST",
+            )
+            check = client.incoming_phone_numbers(numbers[0].sid).fetch()
+            if check.voice_url == want_voice and check.status_callback == want_status:
+                print(f"  Twilio webhooks for {cfg.twilio_phone_number} now point at the tunnel (verified)")
+                return True
+            last_error = f"Twilio still reports voice_url={check.voice_url}"
+        except Exception as e:
+            last_error = f"{type(e).__name__}: {e}"
+        print(f"  Twilio webhook update attempt {attempt} failed: {last_error}")
+        time.sleep(2)
+
+    bar = "!" * 78
+    print(f"\n{bar}\n"
+          f"  CALLS WILL FAIL: could not point {cfg.twilio_phone_number} at the new tunnel.\n"
+          f"  Reason: {last_error}\n"
+          f"  Fix: in the Twilio console set the number's 'A call comes in' webhook to\n"
+          f"       {want_voice}\n"
+          f"  or run: .venv\\Scripts\\python scripts\\live_call.py --fix\n"
+          f"{bar}\n")
+    return False
 
 
 def port_in_use(port: int) -> bool:
@@ -96,10 +120,7 @@ def main() -> None:
     print(f"  Tunnel URL: {url}")
     write_env(url)
     print("  Wrote PUBLIC_BASE_URL to .env")
-    try:
-        update_twilio(url)
-    except Exception as e:
-        print(f"  Twilio webhook update failed: {e}")
+    update_twilio(url)
 
     print(f"Starting backend on port {PORT} (Ctrl+C to stop)...")
     server = subprocess.Popen(

@@ -89,3 +89,43 @@ def test_system_prompt_includes_operator_notes_and_history():
     hist = [Utterance(seq=0, ts=datetime.now(timezone.utc), speaker="caller", text="Your car warranty")]
     p = build_system_prompt(FALLBACK_PERSONA, aggression=4, personality_override="pirate", history=hist)
     assert FALLBACK_PERSONA.name in p and "pirate" in p and "CALLER: Your car warranty" in p
+
+
+def test_signed_twilio_webhook_picks_up(client, monkeypatch):
+    """A request signed exactly like Twilio's is answered with a media stream to the gnome."""
+    from twilio.request_validator import RequestValidator
+
+    from app.config import get_config
+
+    cfg = get_config()
+    monkeypatch.setattr(cfg, "twilio_validate_signature", True)
+    monkeypatch.setattr(cfg, "twilio_auth_token", "test-auth-token")
+    form = {"CallSid": "CA999", "From": "+15550002222", "To": "+15550003333", "CallStatus": "ringing"}
+    signature = RequestValidator("test-auth-token").compute_signature("https://gnome.test/twilio/voice", form)
+
+    r = client.post("/twilio/voice", data=form, headers={"X-Twilio-Signature": signature})
+    assert r.status_code == 200
+    assert "<Connect><Stream url=\"wss://gnome.test/ws/twilio\">" in r.text
+    assert registry.get_by_sid("CA999") is not None
+
+    forged = client.post("/twilio/voice", data={**form, "CallSid": "CA666"}, headers={"X-Twilio-Signature": signature})
+    assert forged.status_code == 403
+    assert registry.get_by_sid("CA666") is None
+
+
+def test_each_call_gets_a_random_voice(client, monkeypatch):
+    from app.config import get_config
+
+    monkeypatch.setattr(type(get_config()), "elevenlabs_voice_ids", property(lambda self: ["voiceA", "voiceB", "voiceC"]))
+    voices = set()
+    for i in range(40):
+        r = client.post("/twilio/voice", data={"CallSid": f"CAv{i}", "From": "+15550001111"})
+        assert r.status_code == 200
+        voices.add(registry.get_by_sid(f"CAv{i}").voice_id)
+    assert voices == {"voiceA", "voiceB", "voiceC"}
+
+    # A voice pinned in settings overrides the random pick
+    client.post("/api/settings", json={"voice_id": "pinned"})
+    client.post("/twilio/voice", data={"CallSid": "CApin", "From": "+15550001111"})
+    assert registry.get_by_sid("CApin").voice_id == "pinned"
+    client.post("/api/settings", json={"voice_id": None})

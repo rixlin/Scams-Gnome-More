@@ -20,9 +20,9 @@ _URL = (
 class TTSStream:
     """One gnome utterance: push text in as it streams from Gemini, pull mu-law audio out."""
 
-    def __init__(self, voice_id: str | None = None) -> None:
+    def __init__(self, voice_id: str) -> None:
         cfg = get_config()
-        self._url = _URL.format(voice_id=voice_id or cfg.elevenlabs_voice_id, model=cfg.elevenlabs_model)
+        self._url = _URL.format(voice_id=voice_id, model=cfg.elevenlabs_model)
         self._key = cfg.elevenlabs_api_key
         self._ws: websockets.ClientConnection | None = None
 

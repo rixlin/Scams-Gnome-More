@@ -58,10 +58,17 @@
   .muted { color: var(--muted); }
   .traits { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .traits span { background: var(--chip); padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+  .waiting { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 8px; background: var(--chip); }
+  .waiting .pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); flex: none; animation: pulse 1.4s infinite; }
+  .waiting.live { background: var(--gnome); }
+  .waiting.live .pulse { background: var(--bad); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+  #soundBanner { display: none; background: var(--warn); color: #000; text-align: center; padding: 8px; cursor: pointer; }
   #history div { padding: 6px 0; border-bottom: 1px solid var(--line); }
 </style>
 </head>
 <body>
+<div id="soundBanner">🔇 Click anywhere on this page to enable sound, so you can hear real calls when they come in.</div>
 <header>
   <h1>🧙 Gnome Call Simulator</h1>
   <div class="pills" id="services"><span class="pill muted">checking services…</span></div>
@@ -71,6 +78,9 @@
   <section>
     <div class="panel stack">
       <h2>Call</h2>
+      <div class="waiting" id="phoneWait"><span class="pulse"></span><span id="phoneText">Connecting…</span></div>
+      <label><input type="checkbox" id="listenCaller" checked style="width:auto"> On real calls, also play the caller's audio</label>
+      <label style="margin-top:6px">Or simulate a call:</label>
       <div class="row" style="margin-top:0">
         <button class="primary" id="btnMic">📞 Call with mic</button>
         <button id="btnNoMic">⌨️ Call, typing only</button>
@@ -115,7 +125,7 @@
   <section>
     <div class="panel">
       <h2>Gnome on the line</h2>
-      <div id="gnome" class="muted">No call yet. Start one on the left.</div>
+      <div id="gnome" class="muted">No call yet. Call your Twilio number, or simulate a call on the left.</div>
     </div>
     <div class="panel">
       <h2>Telemetry</h2>
@@ -149,7 +159,10 @@ const $ = (id) => document.getElementById(id);
 const wsBase = location.origin.replace(/^http/, "ws");
 let callId = null, twilioWs = null, liveWs = null, services = {};
 let audioCtx = null, micStream = null, micNode = null, silenceTimer = null;
-let playHead = 0, playing = [], audioEvents = { caller: 0, gnome: 0 };
+let playHeads = { gnome: 0, caller: 0 }, playing = [], audioEvents = { caller: 0, gnome: 0 };
+let callMode = null;  // "sim" (this page plays Twilio) or "real" (an actual phone call)
+let phoneNumber = null;
+const SIM_CALLER = "browser-simulator";
 let finals = [], partial = { caller: "", gnome: "" };
 let streamReady = null;  // resolves once the fake Twilio stream is attached to the call
 
@@ -223,7 +236,16 @@ function startSilence() {
   silenceTimer = setInterval(() => sendFrame(new Array(160).fill(0xff)), 20);
 }
 
-function playGnomePcm(b64pcm, rate) {
+function ensureAudio() {
+  audioCtx = audioCtx || new AudioContext();
+  audioCtx.resume().then(updateSoundBanner);
+  return audioCtx;
+}
+function updateSoundBanner() {
+  $("soundBanner").style.display = audioCtx?.state === "running" ? "none" : "block";
+}
+function playPcm(b64pcm, rate, track) {
+  if (!audioCtx || audioCtx.state !== "running") return;
   const bin = atob(b64pcm), bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   const pcm = new Int16Array(bytes.buffer);
@@ -233,21 +255,23 @@ function playGnomePcm(b64pcm, rate) {
   const node = audioCtx.createBufferSource();
   node.buffer = buf;
   node.connect(audioCtx.destination);
-  playHead = Math.max(playHead, audioCtx.currentTime);
-  node.start(playHead);
-  playHead += buf.duration;
-  playing.push(node);
-  node.onended = () => { playing = playing.filter((n) => n !== node); };
+  playHeads[track] = Math.max(playHeads[track], audioCtx.currentTime);
+  node.start(playHeads[track]);
+  playHeads[track] += buf.duration;
+  if (track === "gnome") {
+    playing.push(node);
+    node.onended = () => { playing = playing.filter((n) => n !== node); };
+  }
 }
 
 function onTwilioMessage(msg) {
   if (msg.event === "mark") {
     // Twilio echoes a mark back once playback reaches it
-    const delay = Math.max(0, (playHead - audioCtx.currentTime) * 1000);
+    const delay = Math.max(0, (playHeads.gnome - (audioCtx?.currentTime || 0)) * 1000);
     setTimeout(() => twilioWs?.readyState === 1 && twilioWs.send(JSON.stringify({ event: "mark", mark: msg.mark })), delay);
   } else if (msg.event === "clear") {
     playing.forEach((n) => { try { n.stop(); } catch {} });
-    playing = []; playHead = 0;
+    playing = []; playHeads.gnome = 0;
     log("⏹ barge-in: gnome audio cleared");
   }
 }
@@ -281,8 +305,11 @@ function renderGnome(g) {
 function onLiveEvent(ev) {
   const d = ev.data;
   switch (ev.type) {
-    case "audio.caller": audioEvents.caller++; break;
-    case "audio.gnome": audioEvents.gnome++; playGnomePcm(d.pcm16, d.sample_rate); break;
+    case "audio.caller":
+      audioEvents.caller++;
+      if (callMode === "real" && $("listenCaller").checked) playPcm(d.pcm16, d.sample_rate, "caller");
+      break;
+    case "audio.gnome": audioEvents.gnome++; playPcm(d.pcm16, d.sample_rate, "gnome"); break;
     case "call.started": renderGnome(d.gnome); log(`📞 call.started: gnome is ${d.gnome?.name}`); break;
     case "transcript":
       if (d.final) { finals.push(d); partial[d.speaker] = ""; } else partial[d.speaker] = d.text;
@@ -310,14 +337,49 @@ function onLiveEvent(ev) {
   $("audioCount").textContent = `(audio chunks: caller ${audioEvents.caller}, gnome ${audioEvents.gnome})`;
 }
 
+// ---------- waiting for real phone calls ----------
+function setWaiting(text, live = false) {
+  $("phoneText").textContent = text;
+  $("phoneWait").className = `waiting${live ? " live" : ""}`;
+}
+function waitingText() {
+  return phoneNumber ? `Waiting for a call to ${phoneNumber}…` : "Waiting for a phone call to your Twilio number…";
+}
+function resetCallUi() {
+  finals = []; partial = { caller: "", gnome: "" }; audioEvents = { caller: 0, gnome: 0 };
+  playHeads = { gnome: 0, caller: 0 };
+  renderTranscript();
+}
+function watchForCalls() {
+  const ws = new WebSocket(`${wsBase}/ws/live/active`);
+  ws.onopen = () => { if (!callId) setWaiting(waitingText()); };
+  ws.onmessage = (e) => {
+    const ev = JSON.parse(e.data);
+    if (ev.type === "call.started" && !callId && ev.data.caller_number !== SIM_CALLER) attachRealCall(ev.call_id, ev.data);
+  };
+  ws.onclose = () => { if (!callId) setWaiting("Lost connection to the server, retrying…"); setTimeout(watchForCalls, 2000); };
+}
+function attachRealCall(id, data) {
+  callMode = "real";
+  callId = id;
+  resetCallUi();
+  setInCall(true);
+  setWaiting(`📞 Live call from ${data.caller_number || "unknown number"}. The gnome picked up!`, true);
+  log(`☎️ real phone call from ${data.caller_number}; the gnome is answering`);
+  if (audioCtx?.state !== "running") log("Sound is off: click the page to hear the call", "error");
+  liveWs = new WebSocket(`${wsBase}/ws/live/${callId}`);
+  liveWs.onmessage = (e) => onLiveEvent(JSON.parse(e.data));
+}
+
 // ---------- call lifecycle ----------
 async function startCall(withMic) {
   try {
-    audioCtx = audioCtx || new AudioContext();
+    ensureAudio();
     await audioCtx.resume();
-    finals = []; partial = { caller: "", gnome: "" }; audioEvents = { caller: 0, gnome: 0 };
-    renderTranscript();
+    resetCallUi();
+    callMode = "sim";
     callId = (await api("POST", "/demo/call")).call_id;
+    setWaiting("Simulated call in progress (real calls wait until it ends)", true);
     log(`➡️ simulated incoming call ${callId}`);
     setInCall(true);
 
@@ -344,7 +406,8 @@ async function startCall(withMic) {
 }
 function endLocal() {
   setInCall(false);
-  callId = null; streamReady = null;
+  callId = null; streamReady = null; callMode = null;
+  setWaiting(waitingText());
   clearInterval(silenceTimer); silenceTimer = null;
   micNode?.disconnect(); micNode = null;
   micStream?.getTracks().forEach((t) => t.stop()); micStream = null;
@@ -362,6 +425,7 @@ $("btnHang").onclick = async () => {
 };
 async function say() {
   const text = $("sayText").value.trim(); if (!text) return;
+  if (callMode === "real") { log("Typing as the caller only works in simulated calls", "error"); return; }
   if (!callId) await startCall(false);
   if (!callId) return;
   await streamReady;
@@ -392,6 +456,8 @@ $("btnSaveSettings").onclick = async () => {
 async function loadStatus() {
   const st = await api("GET", "/demo/status");
   services = st.services;
+  phoneNumber = st.phone_number;
+  if (!callId) setWaiting(waitingText());
   $("services").innerHTML = "";
   for (const [name, s] of Object.entries(services)) {
     const p = document.createElement("span");
@@ -413,7 +479,9 @@ async function loadHistory() {
   } catch (e) { $("history").textContent = `Unavailable: ${e.message}`; }
 }
 $("btnHistory").onclick = loadHistory;
-loadStatus(); loadSettings(); loadHistory();
+document.addEventListener("click", ensureAudio);
+setTimeout(updateSoundBanner, 500);
+loadStatus(); loadSettings(); loadHistory(); watchForCalls();
 </script>
 </body>
 </html>

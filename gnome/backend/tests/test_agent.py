@@ -45,7 +45,6 @@ def test_turn_produces_transcript_audio_and_mark(monkeypatch, modality):
     cfg = gnome_mod.get_config()
     monkeypatch.setattr(cfg, "gemini_live_modality", modality)
     monkeypatch.setattr(cfg, "elevenlabs_api_key", "test-key")
-    monkeypatch.setattr(cfg, "elevenlabs_voice_id", "test-voice")
 
     def gnome_text(t, **kw):
         if modality == "TEXT":
@@ -63,6 +62,7 @@ def test_turn_produces_transcript_audio_and_mark(monkeypatch, modality):
     async def scenario():
         session = CallSession(call_sid="CA1", caller_number=None)
         session.persona = FALLBACK_PERSONA
+        session.voice_id = "test-voice"
         sent: list[dict] = []
 
         async def send(msg):

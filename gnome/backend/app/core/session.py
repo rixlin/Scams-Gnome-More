@@ -99,6 +99,7 @@ class CallSession:
             "started_at": self.started_at.isoformat(),
             "gnome": self.persona.model_dump() if self.persona else None,
             "personality_override": self.personality_override,
+            "voice_id": self.voice_id,
         }
 
     # ---- transcript ----

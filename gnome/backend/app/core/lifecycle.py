@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import random
 from datetime import datetime, timezone
 
 from twilio.rest import Client as TwilioClient
@@ -19,12 +20,14 @@ log = logging.getLogger(__name__)
 def start_call(call_sid: str | None, caller_number: str | None) -> CallSession:
     session = CallSession(call_sid=call_sid, caller_number=caller_number)
     st = settings_store.get()
-    session.voice_id = st["voice_id"]
+    voices = get_config().elevenlabs_voice_ids
+    # A voice pinned in settings wins; otherwise each call gets a random voice from .env
+    session.voice_id = st["voice_id"] or (random.choice(voices) if voices else None)
     registry.add(session)
     session.tasks.append(asyncio.create_task(_prepare_persona(session)))
     session.tasks.append(asyncio.create_task(_telemetry_ticker(session)))
     session.tasks.append(asyncio.create_task(_max_length_timer(session, st["max_call_seconds"])))
-    log.info("call %s started (sid=%s)", session.id, call_sid)
+    log.info("call %s started (sid=%s, voice=%s)", session.id, call_sid, session.voice_id)
     return session
 
 

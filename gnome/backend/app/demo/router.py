@@ -35,11 +35,12 @@ async def status() -> dict:
     cfg = get_config()
     return {
         "public_base_url": cfg.public_base_url,
+        "phone_number": None if is_placeholder(cfg.twilio_phone_number) else cfg.twilio_phone_number,
         "services": {
             "gemini": {"ok": not is_placeholder(cfg.gemini_api_key),
                        "detail": f"{cfg.gemini_live_model} ({cfg.gemini_live_modality}) / {cfg.gemini_model}"},
-            "elevenlabs": {"ok": not (is_placeholder(cfg.elevenlabs_api_key) or is_placeholder(cfg.elevenlabs_voice_id)),
-                           "detail": cfg.elevenlabs_model},
+            "elevenlabs": {"ok": not is_placeholder(cfg.elevenlabs_api_key) and bool(cfg.elevenlabs_voice_ids),
+                           "detail": f"{cfg.elevenlabs_model}, {len(cfg.elevenlabs_voice_ids)} voice(s)"},
             "twilio": {"ok": not any(is_placeholder(v) for v in (cfg.twilio_account_sid, cfg.twilio_auth_token)),
                        "detail": "account SID + auth token (phone number is only used by run.py)"},
             "database": {"ok": repo.pool is not None, "detail": "Tiger Data"},

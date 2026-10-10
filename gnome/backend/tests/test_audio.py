@@ -43,3 +43,14 @@ def test_gnome_track_aligns_and_truncates():
     gnome = frames[:, 1]
     assert gnome.size == 1200
     assert (gnome[:800] == 0).all() and (gnome[800:1200] == 7).all()
+
+
+def test_voice_ids_from_numbered_keys_and_comma_list(monkeypatch):
+    from app.config import Config
+
+    for k in ("ELEVENLABS_VOICE_ID", "ELEVENLABS_VOICE_ID1", "ELEVENLABS_VOICE_ID2", "ELEVENLABS_VOICE_ID10"):
+        monkeypatch.delenv(k, raising=False)
+    cfg = Config(_env_file=None, elevenlabs_voice_id="PLACEHOLDER_X", ELEVENLABS_VOICE_ID2="b", ELEVENLABS_VOICE_ID1="a",
+                 ELEVENLABS_VOICE_ID10="c")
+    assert cfg.elevenlabs_voice_ids == ["a", "b", "c"]
+    assert Config(_env_file=None, elevenlabs_voice_id="x, y,x").elevenlabs_voice_ids == ["x", "y"]

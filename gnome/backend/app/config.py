@@ -1,3 +1,4 @@
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -12,7 +13,8 @@ def is_placeholder(value: str | None) -> bool:
 
 
 class Config(BaseSettings):
-    model_config = SettingsConfigDict(env_file=BACKEND_DIR / ".env", extra="ignore")
+    # extra="allow" keeps unknown .env keys such as ELEVENLABS_VOICE_ID2 in model_extra
+    model_config = SettingsConfigDict(env_file=BACKEND_DIR / ".env", extra="allow")
 
     # Public hostname from the Cloudflare tunnel, e.g. https://gnome.example.com
     public_base_url: str = "http://localhost:8000"
@@ -32,6 +34,8 @@ class Config(BaseSettings):
     gemini_live_modality: str = "AUDIO"
 
     elevenlabs_api_key: str = "PLACEHOLDER_ELEVENLABS_API_KEY"
+    # One voice id or several separated by commas (numbered ELEVENLABS_VOICE_ID1, _ID2, ... also work);
+    # each call gets one at random
     elevenlabs_voice_id: str = "PLACEHOLDER_ELEVENLABS_VOICE_ID"
     elevenlabs_model: str = "eleven_flash_v2_5"
 
@@ -40,6 +44,15 @@ class Config(BaseSettings):
 
     # Tiger Data service URL (postgres://...?sslmode=require)
     database_url: str = "PLACEHOLDER_DATABASE_URL"
+
+    @property
+    def elevenlabs_voice_ids(self) -> list[str]:
+        raw = [self.elevenlabs_voice_id]
+        numbered = {k.lower(): v for k, v in (self.model_extra or {}).items()
+                    if re.fullmatch(r"elevenlabs_voice_id\d+", k, re.IGNORECASE)}
+        raw += [numbered[k] for k in sorted(numbered, key=lambda k: int(k.removeprefix("elevenlabs_voice_id")))]
+        ids = (v.strip() for value in raw for v in str(value).split(","))
+        return list(dict.fromkeys(v for v in ids if not is_placeholder(v)))
 
     @property
     def public_ws_base(self) -> str:
