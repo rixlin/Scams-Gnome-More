@@ -64,7 +64,10 @@
   .waiting.live .pulse { background: var(--bad); }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
   #soundBanner { display: none; background: var(--warn); color: #000; text-align: center; padding: 8px; cursor: pointer; }
-  #history div { padding: 6px 0; border-bottom: 1px solid var(--line); }
+  #history button { display: block; width: 100%; text-align: left; margin: 0 0 6px; background: var(--bg); }
+  #history button.selected { border-color: var(--accent); }
+  #replay { display: none; margin-bottom: 10px; }
+  #replay audio { width: 100%; margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -137,6 +140,10 @@
     </div>
     <div class="panel">
       <h2>Transcript</h2>
+      <div id="replay">
+        <div class="muted" id="replayLabel"></div>
+        <audio id="replayAudio" controls preload="none"></audio>
+      </div>
       <div id="transcript"></div>
     </div>
   </section>
@@ -298,7 +305,8 @@ function renderGnome(g) {
   el.innerHTML = `<div class="gnome-name"></div><p class="muted"></p><div class="traits"></div>`;
   el.querySelector(".gnome-name").textContent = g.name;
   el.querySelector("p").textContent = g.backstory;
-  for (const t of [...(g.personality_traits || []), ...(g.speaking_quirks || [])]) {
+  const p = g.personality || {};  // saved calls keep traits/quirks under "personality"
+  for (const t of [...(g.personality_traits || p.traits || []), ...(g.speaking_quirks || p.quirks || [])]) {
     const s = document.createElement("span"); s.textContent = t; el.querySelector(".traits").append(s);
   }
 }
@@ -346,6 +354,7 @@ function waitingText() {
   return phoneNumber ? `Waiting for a call to ${phoneNumber}…` : "Waiting for a phone call to your Twilio number…";
 }
 function resetCallUi() {
+  if (typeof hideReplay === "function" && $("replay").style.display === "block") hideReplay();
   finals = []; partial = { caller: "", gnome: "" }; audioEvents = { caller: 0, gnome: 0 };
   playHeads = { gnome: 0, caller: 0 };
   renderTranscript();
@@ -470,15 +479,47 @@ async function loadStatus() {
 async function loadHistory() {
   try {
     const calls = await api("GET", "/api/calls?limit=10");
-    $("history").innerHTML = calls.length ? "" : "No saved calls yet.";
+    $("history").innerHTML = calls.length ? "<div class='muted' style='margin-bottom:6px'>Click a call to replay it</div>" : "No saved calls yet.";
     for (const c of calls) {
-      const d = document.createElement("div");
-      d.textContent = `${new Date(c.started_at).toLocaleString()} · ${c.gnome_name || "?"} · ${c.duration_s ?? "?"}s · ${c.end_reason}`;
-      $("history").append(d);
+      const b = document.createElement("button");
+      const who = c.caller_number === SIM_CALLER ? "simulated" : (c.caller_number || "unknown");
+      b.textContent = `${new Date(c.started_at).toLocaleString()} · ${who} · ${c.gnome_name || "?"} · ${c.duration_s ?? "?"}s`;
+      b.dataset.id = c.id;
+      b.onclick = () => replayCall(c.id);
+      $("history").append(b);
     }
   } catch (e) { $("history").textContent = `Unavailable: ${e.message}`; }
 }
 $("btnHistory").onclick = loadHistory;
+
+async function replayCall(id) {
+  if (callId) { log("Finish or hang up the current call before replaying a saved one", "error"); return; }
+  try {
+    const c = await api("GET", `/api/calls/${id}`);
+    resetCallUi();
+    finals = c.utterances.map((u) => ({ ...u, final: true }));
+    renderTranscript();
+    renderGnome(c.gnome);
+    document.querySelectorAll("#history button").forEach((b) => b.classList.toggle("selected", b.dataset.id === id));
+    $("replay").style.display = "block";
+    $("replayLabel").textContent = `Saved call from ${c.caller_number || "unknown"} · ${new Date(c.started_at).toLocaleString()} · ${c.duration_s ?? "?"}s`;
+    const player = $("replayAudio");
+    if (c.has_audio) {
+      player.style.display = "block";
+      player.src = `/api/calls/${id}/audio?mono=true`;
+      player.play().catch(() => {});  // may need a click on the play button if the browser blocks autoplay
+    } else {
+      player.style.display = "none";
+      $("replayLabel").textContent += " · no recording";
+    }
+  } catch (e) { log(`replay failed: ${e.message}`, "error"); }
+}
+function hideReplay() {
+  const player = $("replayAudio");
+  player.pause(); player.removeAttribute("src"); player.load();
+  $("replay").style.display = "none";
+  document.querySelectorAll("#history button.selected").forEach((b) => b.classList.remove("selected"));
+}
 document.addEventListener("click", ensureAudio);
 setTimeout(updateSoundBanner, 500);
 loadStatus(); loadSettings(); loadHistory(); watchForCalls();

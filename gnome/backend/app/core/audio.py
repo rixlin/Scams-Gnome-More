@@ -65,3 +65,18 @@ def stereo_wav(left: np.ndarray, right: np.ndarray, rate: int) -> bytes:
         w.setframerate(rate)
         w.writeframes(frames.tobytes())
     return buf.getvalue()
+
+
+def stereo_to_mono_wav(data: bytes) -> bytes:
+    with wave.open(io.BytesIO(data)) as w:
+        rate, channels = w.getframerate(), w.getnchannels()
+        frames = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
+    if channels == 2:
+        frames = frames.reshape(-1, 2).astype(np.int32).sum(axis=1).clip(-32768, 32767).astype(np.int16)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(frames.tobytes())
+    return buf.getvalue()

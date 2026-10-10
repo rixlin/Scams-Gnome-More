@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response
 
-from app.core import lifecycle, registry
+from app.core import audio, lifecycle, registry
 from app.db import repo
 from app.models import ActiveCall, CallDetail, CallSummary
 
@@ -43,13 +43,16 @@ async def call_detail(call_id: UUID):
 
 
 @router.get("/{call_id}/audio")
-async def call_audio(call_id: UUID) -> Response:
+async def call_audio(call_id: UUID, mono: bool = False) -> Response:
+    """The call recording: stereo WAV (left = caller, right = gnome), or both mixed into one channel."""
     try:
         wav = await repo.get_call_audio(call_id)
     except repo.DatabaseUnavailable as e:
         raise _db_errors(e)
     if wav is None:
         raise HTTPException(404, "no audio for this call")
+    if mono:
+        wav = audio.stereo_to_mono_wav(wav)
     return Response(content=wav, media_type="audio/wav")
 
 

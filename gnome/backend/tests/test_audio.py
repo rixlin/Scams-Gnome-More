@@ -54,3 +54,11 @@ def test_voice_ids_from_numbered_keys_and_comma_list(monkeypatch):
                  ELEVENLABS_VOICE_ID10="c")
     assert cfg.elevenlabs_voice_ids == ["a", "b", "c"]
     assert Config(_env_file=None, elevenlabs_voice_id="x, y,x").elevenlabs_voice_ids == ["x", "y"]
+
+
+def test_stereo_to_mono_mixes_both_sides():
+    left, right = np.full(8, 1000, np.int16), np.full(8, -300, np.int16)
+    mono = audio.stereo_to_mono_wav(audio.stereo_wav(left, right, 8000))
+    with wave.open(io.BytesIO(mono)) as w:
+        assert (w.getnchannels(), w.getframerate()) == (1, 8000)
+        assert (np.frombuffer(w.readframes(8), np.int16) == 700).all()
