@@ -186,7 +186,7 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
                       ) : (
                         <>
                           <User className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                          <span className="text-amber-500 font-bold">Scammer / Caller</span>
+                          <span className="text-amber-500 font-bold">Scammer</span>
                         </>
                       )}
                     </div>

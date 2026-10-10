@@ -65,31 +65,31 @@ body[data-theme="mythical-dark"] {
 
 html[data-theme="mythical-light"],
 body[data-theme="mythical-light"] {
-  /* Garden Gnome Outfit - Washed Chambray & Pale Slate Base */
-  --theme-canvas: #edf2f7;
-  --theme-zinc-950: #f6f9fc;
-  --theme-zinc-900: #ffffff;
-  --theme-zinc-800: #d2dce8;
-  --theme-zinc-700: #bcc9dc;
-  --theme-zinc-600: #8fa1b8;
-  --theme-zinc-500: #637791;
-  --theme-zinc-400: #455870;
-  --theme-zinc-300: #2b3a4d;
-  --theme-zinc-200: #1c2838;
-  --theme-zinc-100: #111924;
-  --theme-zinc-50: #090e15;
+  /* Garden Gnome Outfit - Washed Chambray & Very Light Blue Base */
+  --theme-canvas: #dbe7f6;
+  --theme-zinc-950: #e8f1fc;
+  --theme-zinc-900: #f0f6fd;
+  --theme-zinc-800: #bcd2e8;
+  --theme-zinc-700: #a2c0dc;
+  --theme-zinc-600: #6b8eaf;
+  --theme-zinc-500: #4a6f94;
+  --theme-zinc-400: #315478;
+  --theme-zinc-300: #1f3e60;
+  --theme-zinc-200: #132c48;
+  --theme-zinc-100: #0c1d32;
+  --theme-zinc-50: #06111f;
 
   /* Garden Fern & Herbal Sage */
-  --theme-emerald-950: #e8f3ea;
-  --theme-emerald-900: #c9e3cd;
-  --theme-emerald-800: #236938;
-  --theme-emerald-700: #1d572e;
-  --theme-emerald-600: #277a3f;
-  --theme-emerald-500: #16a34a;
-  --theme-emerald-400: #15803d;
-  --theme-emerald-300: #166534;
-  --theme-emerald-200: #14532d;
-  --theme-emerald-100: #0f3d20;
+  --theme-emerald-950: #e1f2e5;
+  --theme-emerald-900: #c2e5cb;
+  --theme-emerald-800: #226b38;
+  --theme-emerald-700: #1c592e;
+  --theme-emerald-600: #25763d;
+  --theme-emerald-500: #15803d;
+  --theme-emerald-400: #166534;
+  --theme-emerald-300: #14532d;
+  --theme-emerald-200: #0f3d20;
+  --theme-emerald-100: #0a2a16;
 
   /* Pointy Hat Terracotta Red */
   --theme-red-950: #fcedeb;
@@ -111,16 +111,16 @@ body[data-theme="mythical-light"] {
   --theme-amber-100: #451a03;
 
   /* Gnome Wool Tunic Blue/Indigo */
-  --theme-indigo-950: #eff4fb;
-  --theme-indigo-900: #dbe6f5;
-  --theme-indigo-700: #b6cded;
-  --theme-indigo-400: #3b5d8c;
-  --theme-indigo-300: #284368;
-  --theme-indigo-200: #1b2f4a;
-  --theme-indigo-100: #101c2e;
+  --theme-indigo-950: #e8f1fc;
+  --theme-indigo-900: #cddff7;
+  --theme-indigo-700: #a3c4f0;
+  --theme-indigo-400: #2d5e9e;
+  --theme-indigo-300: #1e477e;
+  --theme-indigo-200: #14335c;
+  --theme-indigo-100: #0c213d;
 
-  --theme-blue-400: #2a6199;
-  --theme-blue-300: #1b4570;
+  --theme-blue-400: #2563eb;
+  --theme-blue-300: #1d4ed8;
 
   color-scheme: light;
 }

@@ -126,7 +126,7 @@ export const CallBox: React.FC<CallBoxProps> = ({
               <PhoneCall className="w-3.5 h-3.5 text-blue-400" />
               Gnome&apos;s Number
             </div>
-            <div className="text-xs font-mono text-zinc-300 truncate">
+            <div className="text-sm font-mono text-zinc-300 truncate">
               {call.gnome_number}
             </div>
           </div>

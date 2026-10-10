@@ -297,7 +297,7 @@ export default function HomePage() {
             <div className="flex items-center gap-2.5">
               <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
               <span>
-                Backend connection notice: {error}. Check backend server settings in Settings.
+                Backend connection notice: Check your backend or server settings in Settings ({error}).
               </span>
             </div>
             <button
