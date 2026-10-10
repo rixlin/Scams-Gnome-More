@@ -1,6 +1,7 @@
 """Start the Cloudflare tunnel + the backend, and point Twilio at it.
 
-    .venv\\Scripts\\python run.py
+    .venv\\Scripts\\python run.py      (Windows)
+    .venv/bin/python run.py          (macOS / Linux)
 
 Named tunnel (CLOUDFLARE_TUNNEL set in .env): runs that tunnel, which serves the fixed hostname in
 PUBLIC_BASE_URL, so the address never changes.
@@ -25,16 +26,29 @@ BACKEND_DIR = Path(__file__).resolve().parent
 ENV_FILE = BACKEND_DIR / ".env"
 PORT = int(os.environ.get("PORT", "8000"))
 URL_RE = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
-WINDOWS_INSTALL_PATHS = [
-    r"C:\Program Files (x86)\cloudflared\cloudflared.exe",
-    r"C:\Program Files\cloudflared\cloudflared.exe",
-]
+# Common install locations, checked when cloudflared isn't on PATH
+if sys.platform == "win32":
+    INSTALL_PATHS = [
+        r"C:\Program Files (x86)\cloudflared\cloudflared.exe",
+        r"C:\Program Files\cloudflared\cloudflared.exe",
+    ]
+else:
+    INSTALL_PATHS = [
+        "/opt/homebrew/bin/cloudflared",  # Homebrew on Apple Silicon
+        "/usr/local/bin/cloudflared",     # Homebrew on Intel macs, manual installs
+        "/usr/bin/cloudflared",           # .deb / .rpm packages
+        str(Path.home() / ".local/bin/cloudflared"),
+    ]
 
 
 def find_cloudflared() -> str:
-    found = shutil.which("cloudflared") or next((p for p in WINDOWS_INSTALL_PATHS if Path(p).exists()), None)
+    found = shutil.which("cloudflared") or next(
+        (p for p in INSTALL_PATHS if Path(p).is_file() and os.access(p, os.X_OK)), None
+    )
     if not found:
-        sys.exit("cloudflared not found; install it or add it to PATH")
+        sys.exit("cloudflared not found; install it or add it to PATH "
+                 "(macOS: brew install cloudflared, Linux: see "
+                 "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)")
     return found
 
 
@@ -122,12 +136,14 @@ def update_twilio(url: str) -> bool:
         time.sleep(2)
 
     bar = "!" * 78
+    venv_python = r".venv\Scripts\python" if sys.platform == "win32" else ".venv/bin/python"
+    fix_script = r"scripts\live_call.py" if sys.platform == "win32" else "scripts/live_call.py"
     print(f"\n{bar}\n"
           f"  CALLS WILL FAIL: could not point {cfg.twilio_phone_number} at the new tunnel.\n"
           f"  Reason: {last_error}\n"
           f"  Fix: in the Twilio console set the number's 'A call comes in' webhook to\n"
           f"       {want_voice}\n"
-          f"  or run: .venv\\Scripts\\python scripts\\live_call.py --fix\n"
+          f"  or run: {venv_python} {fix_script} --fix\n"
           f"{bar}\n")
     return False
 
