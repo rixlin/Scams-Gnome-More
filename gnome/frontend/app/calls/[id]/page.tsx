@@ -10,7 +10,12 @@ import { TranscriptFeed } from "../../../components/session/TranscriptFeed";
 import { GnomeLiveEditor } from "../../../components/session/GnomeLiveEditor";
 import { Navbar } from "../../../components/layout/Navbar";
 import { useCallTelemetry } from "../../../hooks/useCallTelemetry";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import {
+  AlertCircle,
+  RefreshCw,
+  MessageSquare,
+  ChevronLeft,
+} from "lucide-react";
 
 function CallSessionContent() {
   const params = useParams();
@@ -21,12 +26,21 @@ function CallSessionContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isTerminating, setIsTerminating] = useState(false);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+
+  const reloadDetail = useCallback(async () => {
+    if (!callId) return;
+    try {
+      const data = await fetchCallDetail(callId);
+      setCall(data);
+    } catch {}
+  }, [callId]);
 
   useEffect(() => {
     if (!callId) return;
     let active = true;
 
-    async function loadDetail() {
+    async function fetchInitialDetail() {
       try {
         const data = await fetchCallDetail(callId);
         if (active) {
@@ -44,7 +58,7 @@ function CallSessionContent() {
       }
     }
 
-    loadDetail();
+    fetchInitialDetail();
 
     return () => {
       active = false;
@@ -81,12 +95,13 @@ function CallSessionContent() {
   };
 
   const isCallActive = call?.status === "active" && !isTerminated;
+  const turnsCount = transcript.length > 0 ? transcript.length : call?.transcript?.length || 0;
 
   return (
-    <div className="min-h-screen bg-black text-zinc-100 flex flex-col font-sans">
+    <div className="h-screen max-h-screen bg-black text-zinc-100 flex flex-col font-sans w-full overflow-hidden">
       <Navbar />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="w-full px-4 sm:px-6 xl:px-8 py-3 flex-1 min-h-0 flex flex-col overflow-hidden">
         {loading && (
           <div className="flex items-center justify-center p-20 text-zinc-400 gap-2">
             <RefreshCw className="w-5 h-5 animate-spin text-emerald-400" />
@@ -111,43 +126,84 @@ function CallSessionContent() {
         )}
 
         {call && (
-          <>
-            {/* Top Session Header & Quick Controls */}
-            <SessionHeader
-              call={{
-                ...call,
-                status: isCallActive ? "active" : "ended",
-              }}
-              onTerminate={handleTerminateCall}
-              isTerminating={isTerminating}
-            />
+          <div className="flex-1 min-h-0 flex flex-col xl:flex-row gap-6 relative overflow-hidden">
+            {/* Left Half: Scrollable column on Desktop, full height scroll */}
+            <div className="w-full xl:w-1/2 flex flex-col space-y-4 overflow-y-auto min-h-0 h-full pr-1 sm:pr-2 pb-6">
+              <SessionHeader
+                call={{
+                  ...call,
+                  status: isCallActive ? "active" : "ended",
+                }}
+                onTerminate={handleTerminateCall}
+                isTerminating={isTerminating}
+              />
 
-            {/* Overlapped Dual-Stream Audio Player */}
-            <OverlappedAudioPlayer callId={call.id} />
+              <OverlappedAudioPlayer callId={call.id} />
 
-            {/* 2-Column Live Console Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              {/* Left Column (8 cols): Live Transcript with Single-line Gnome State History */}
-              <div className="lg:col-span-7 xl:col-span-8">
-                <TranscriptFeed
-                  transcript={transcript.length > 0 ? transcript : call.transcript}
-                  gnomeName={call.gnome?.name || "Assigned Gnome"}
-                  currentGnomeState={currentGnomeState}
-                  activeTurnStateHistory={activeTurnStateHistory}
-                  isCallActive={isCallActive}
-                />
-              </div>
-
-              {/* Right Column (4 cols): Live Gnome Editor & Prompt Injections */}
-              <div className="lg:col-span-5 xl:col-span-4">
-                <GnomeLiveEditor
-                  callId={call.id}
-                  gnome={call.gnome}
-                  isCallActive={isCallActive}
-                />
-              </div>
+              <GnomeLiveEditor
+                callId={call.id}
+                gnome={call.gnome}
+                isCallActive={isCallActive}
+                onGnomeUpdated={reloadDetail}
+              />
             </div>
-          </>
+
+            {/* Right Half on Desktop: Pinned fixed window height, full flex-1 height */}
+            <div className="hidden xl:flex xl:w-1/2 h-full min-h-0 flex-col overflow-hidden pb-1">
+              <TranscriptFeed
+                callId={call.id}
+                transcript={transcript.length > 0 ? transcript : call.transcript}
+                gnomeName={call.gnome?.name || "Assigned Gnome"}
+                currentGnomeState={currentGnomeState}
+                activeTurnStateHistory={activeTurnStateHistory}
+                isCallActive={isCallActive}
+                onGnomeUpdated={reloadDetail}
+                className="h-full flex-1 min-h-0"
+              />
+            </div>
+
+            {/* Pinned Button on the Right Side (Visible on mobile / screens < lg) */}
+            <button
+              onClick={() => setIsMobileDrawerOpen(true)}
+              className="xl:hidden fixed right-0 top-1/2 -translate-y-1/2 z-40 bg-emerald-600 hover:bg-emerald-500 text-white py-3.5 px-2 rounded-l-2xl shadow-2xl flex flex-col items-center gap-2 transition-all font-mono text-xs border-y border-l border-emerald-400/50"
+              title="Open Live Transcript"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span className="[writing-mode:vertical-lr] tracking-widest font-bold text-[10px]">
+                TRANSCRIPT ({turnsCount})
+              </span>
+              <ChevronLeft className="w-3.5 h-3.5 animate-pulse" />
+            </button>
+
+            {/* Slide-out Backdrop when drawer is open on mobile */}
+            {isMobileDrawerOpen && (
+              <div
+                onClick={() => setIsMobileDrawerOpen(false)}
+                className="xl:hidden fixed inset-0 z-40 bg-black/45 backdrop-blur-[2px] animate-in fade-in"
+              />
+            )}
+
+            {/* Slide-out Transcript Drawer from the right edge on mobile / narrow view */}
+            <div
+              className={`xl:hidden fixed inset-y-0 right-0 z-50 w-full sm:w-[500px] h-full max-h-screen bg-zinc-900 border-l border-zinc-800 shadow-2xl flex flex-col min-h-0 overflow-hidden transition-transform duration-300 ease-in-out ${
+                isMobileDrawerOpen
+                  ? "translate-x-0"
+                  : "translate-x-full pointer-events-none"
+              }`}
+            >
+              <TranscriptFeed
+                callId={call.id}
+                transcript={transcript.length > 0 ? transcript : call.transcript}
+                gnomeName={call.gnome?.name || "Assigned Gnome"}
+                currentGnomeState={currentGnomeState}
+                activeTurnStateHistory={activeTurnStateHistory}
+                isCallActive={isCallActive}
+                onGnomeUpdated={reloadDetail}
+                onClose={() => setIsMobileDrawerOpen(false)}
+                className="h-full rounded-none border-none min-h-0"
+              />
+            </div>
+          </div>
         )}
       </main>
     </div>

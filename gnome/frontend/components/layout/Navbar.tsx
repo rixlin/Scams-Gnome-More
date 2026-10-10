@@ -17,7 +17,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeCount = 0, onAddDebugCall 
   return (
     <>
       <header className="sticky top-0 z-40 w-full border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Brand */}
           <Link href="/" className="flex items-center gap-3 group">
             <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
@@ -43,7 +43,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeCount = 0, onAddDebugCall 
             {/* Live Calls Counter Badge */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs">
               <Activity className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-zinc-400">Active Interceptions:</span>
+              <span className="text-zinc-400">Active Gnomes:</span>
               <span className="font-mono font-bold text-emerald-400">
                 {activeCount}
               </span>

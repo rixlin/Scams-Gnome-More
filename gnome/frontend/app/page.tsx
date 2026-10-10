@@ -50,7 +50,18 @@ export default function HomePage() {
     }
   }, []);
 
-  // Initial load and periodic polling
+  const syncDebugCalls = useCallback(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = window.localStorage.getItem("gnome_debug_calls");
+        if (stored) {
+          setDebugCalls(JSON.parse(stored));
+        }
+      } catch {}
+    }
+  }, []);
+
+  // Initial load, storage sync, and periodic polling
   useEffect(() => {
     let active = true;
 
@@ -71,6 +82,7 @@ export default function HomePage() {
     initialFetch();
 
     const interval = setInterval(async () => {
+      syncDebugCalls();
       try {
         const data = await fetchCallSessions();
         if (active) {
@@ -80,13 +92,21 @@ export default function HomePage() {
       } catch {
         // Silent poll error
       }
-    }, 4000);
+    }, 3000);
+
+    const handleSync = () => syncDebugCalls();
+    window.addEventListener("gnome_calls_updated", handleSync);
+    window.addEventListener("focus", handleSync);
+    window.addEventListener("storage", handleSync);
 
     return () => {
       active = false;
       clearInterval(interval);
+      window.removeEventListener("gnome_calls_updated", handleSync);
+      window.removeEventListener("focus", handleSync);
+      window.removeEventListener("storage", handleSync);
     };
-  }, []);
+  }, [syncDebugCalls]);
 
   // Merge debug calls and backend calls, avoiding duplicates
   const allCalls: CallSessionSummary[] = [
@@ -113,6 +133,7 @@ export default function HomePage() {
     // If it's a debug call, update its status locally
     const isDebug = debugCalls.some((c) => c.id === callId);
     if (isDebug) {
+      await terminateCall(callId, "operator_dashboard_terminate");
       setDebugCalls((prev) => {
         const updated = prev.map((c) =>
           c.id === callId ? { ...c, status: "ended" as const, ended_at: new Date().toISOString() } : c
@@ -190,7 +211,7 @@ export default function HomePage() {
         onAddDebugCall={handleAddDebugCall}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
+      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-8 space-y-10">
         {/* Top Header Bar */}
         <div className="flex flex-wrap items-center justify-between gap-4 pb-2 border-b border-zinc-900">
           <div>
@@ -198,7 +219,7 @@ export default function HomePage() {
               <span>Interception Burrow</span>
             </h1>
             <p className="text-xs text-zinc-400 mt-1">
-              Live monitoring for virtual Twilio numbers intercepting scam callers.
+              Live monitoring for gnomes intercepting scam callers.
             </p>
           </div>
 
@@ -291,7 +312,7 @@ export default function HomePage() {
         {/* Section A: Active Calls */}
         <CallSection
           title="Active Calls"
-          description="Calls currently connected to a virtual Twilio phone number"
+          description="Calls currently connected to a gnome"
           badgeCount={activeCalls.length}
           badgeVariant="emerald"
           calls={activeCalls}

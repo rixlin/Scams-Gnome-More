@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { X, Settings as SettingsIcon, Check, AlertCircle, RefreshCw, PlusCircle, Server, Bug } from "lucide-react";
 import { fetchSettings, updateSettings } from "../../lib/api";
 import { CallSessionSummary } from "../../lib/types";
+import { createSampleDebugCallDetail } from "../../lib/debug-call-generator";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -16,7 +17,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   onAddDebugCall,
 }) => {
-  const [activeTab, setActiveTab] = useState<"system" | "debug">("debug");
+  const [activeTab, setActiveTab] = useState<"system" | "debug">("system");
   const [loading, setLoading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -42,7 +43,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [debugScammerNumber, setDebugScammerNumber] = useState("+1 (555) 392-8172");
   const [debugRegion, setDebugRegion] = useState("New York, NY");
   const [debugGnomeNumber, setDebugGnomeNumber] = useState("+1 (800) 420-GNOM");
-  const [debugGnomeName, setDebugGnomeName] = useState("Gnome Barnaby");
+  const [debugGnomeName, setDebugGnomeName] = useState("Barnaby");
   const [debugSuccessMsg, setDebugSuccessMsg] = useState<string | null>(null);
 
   // Load backend settings on open
@@ -102,23 +103,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleCreateDebugCall = (e: React.FormEvent) => {
     e.preventDefault();
 
+    const initialOffsetSeconds = 145;
+    const startedAtIso = new Date(Date.now() - initialOffsetSeconds * 1000).toISOString();
+
     const newCall: CallSessionSummary = {
-      id: `call-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      id: `call-debug-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
       scammer_number: debugScammerNumber.trim() || "+1 (555) 000-0000",
       region: debugRegion.trim() || "Unknown Region",
       gnome_number: debugGnomeNumber.trim() || "+1 (800) 420-GNOM",
-      gnome_name: debugGnomeName.trim() || "Gnome Defender",
-      started_at: new Date().toISOString(),
+      gnome_name: debugGnomeName.trim() || "Gnome Barnaby",
+      started_at: startedAtIso,
       ended_at: null,
-      duration_seconds: 0,
+      duration_seconds: initialOffsetSeconds,
       status: "active",
     };
+
+    // Generate sample debug call details with sample transcript and gnome lore
+    const fullDetail = createSampleDebugCallDetail(newCall);
+
+    if (typeof window !== "undefined") {
+      try {
+        const stored = JSON.parse(
+          window.localStorage.getItem("gnome_debug_call_details") || "{}"
+        );
+        stored[newCall.id] = fullDetail;
+        window.localStorage.setItem(
+          "gnome_debug_call_details",
+          JSON.stringify(stored)
+        );
+      } catch {
+        // Fallback
+      }
+    }
 
     if (onAddDebugCall) {
       onAddDebugCall(newCall);
     }
 
-    setDebugSuccessMsg(`Active session added: ${newCall.scammer_number}`);
+    setDebugSuccessMsg(`Active session added: ${newCall.scammer_number} (${newCall.gnome_name})`);
     setTimeout(() => setDebugSuccessMsg(null), 3000);
   };
 
@@ -130,7 +152,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px] animate-in fade-in duration-150">
       <div className="relative w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/60">
@@ -149,17 +171,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Tab Navigation */}
         <div className="flex border-b border-zinc-800 bg-zinc-950/30 px-6 gap-6">
           <button
-            onClick={() => setActiveTab("debug")}
-            className={`py-3 text-xs font-semibold border-b-2 flex items-center gap-2 transition-colors ${
-              activeTab === "debug"
-                ? "border-emerald-500 text-emerald-400"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Bug className="w-4 h-4" />
-            Debug &amp; Preview
-          </button>
-          <button
             onClick={() => setActiveTab("system")}
             className={`py-3 text-xs font-semibold border-b-2 flex items-center gap-2 transition-colors ${
               activeTab === "system"
@@ -169,6 +180,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           >
             <Server className="w-4 h-4" />
             System &amp; Server
+          </button>
+          <button
+            onClick={() => setActiveTab("debug")}
+            className={`py-3 text-xs font-semibold border-b-2 flex items-center gap-2 transition-colors ${
+              activeTab === "debug"
+                ? "border-emerald-500 text-emerald-400"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <Bug className="w-4 h-4" />
+            Debug &amp; Preview
           </button>
         </div>
 
@@ -258,7 +280,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       required
                       value={debugGnomeName}
                       onChange={(e) => setDebugGnomeName(e.target.value)}
-                      placeholder="e.g. Gnome Barnaby"
+                      placeholder="e.g. Barnaby"
                       className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-emerald-500/80"
                     />
                   </div>

@@ -33,10 +33,12 @@ export interface GnomeProfile {
 
 export interface TranscriptTurn {
   id: string;
-  speaker: "user" | "gnome";
+  speaker: "user" | "gnome" | "operator";
   text: string;
-  timestamp: string;
+  timestamp: string; // Real-time timestamp (ISO string)
+  in_call_time?: string; // In-call relative timestamp (e.g. "+00:15")
   state_history?: GnomeState[];
+  feedback_cue?: string;
 }
 
 export interface CallSessionDetail {
@@ -77,11 +79,13 @@ export type TelemetryEvent =
     }
   | {
       type: "transcript_chunk";
-      speaker: "user" | "gnome";
+      speaker: "user" | "gnome" | "operator";
       text: string;
       is_final: boolean;
       timestamp: string;
       turn_id?: string;
+      in_call_time?: string;
+      feedback_cue?: string;
     }
   | {
       type: "call_terminated";

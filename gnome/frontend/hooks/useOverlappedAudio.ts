@@ -13,7 +13,7 @@ export function useOverlappedAudio({
   wsBaseUrl,
   autoPlay = true,
 }: UseOverlappedAudioOptions) {
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [userVolume, setUserVolumeState] = useState(0.85);
   const [gnomeVolume, setGnomeVolumeState] = useState(0.85);
 

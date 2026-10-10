@@ -27,7 +27,12 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
   isTerminating = false,
 }) => {
   const [showConfirm, setShowConfirm] = useState(false);
-  const elapsed = useCallDuration(call.started_at, call.status, call.duration_seconds);
+  const elapsed = useCallDuration(
+    call.started_at,
+    call.status,
+    call.duration_seconds,
+    call.ended_at
+  );
   const isActive = call.status === "active";
 
   const handleConfirmTerminate = async () => {
@@ -94,7 +99,7 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
 
       {/* Confirmation Modal */}
       {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px]">
           <div className="w-full max-w-md bg-zinc-900 border border-red-800/80 rounded-2xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center gap-3 text-red-400">
               <AlertTriangle className="w-6 h-6" />
@@ -136,7 +141,7 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
         <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/80">
           <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500 flex items-center gap-1.5 mb-1">
             <PhoneCall className="w-3.5 h-3.5 text-blue-400" />
-            Gnome&apos;s Virtual Twilio Number
+            Gnome&apos;s Number
           </div>
           <div className="text-sm font-bold text-blue-300 font-mono">
             {call.gnome_number}

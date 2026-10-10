@@ -25,7 +25,8 @@ export const CallBox: React.FC<CallBoxProps> = ({
   const elapsedSeconds = useCallDuration(
     call.started_at,
     call.status,
-    call.duration_seconds
+    call.duration_seconds,
+    call.ended_at
   );
 
   const isActive = call.status === "active";

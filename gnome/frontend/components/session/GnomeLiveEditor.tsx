@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Sliders, Send, Check, AlertCircle, RefreshCw, UserCheck } from "lucide-react";
+import { Sliders, Check, AlertCircle, RefreshCw, UserCheck } from "lucide-react";
 import { GnomeProfile } from "../../lib/types";
 import { updateGnomeLive } from "../../lib/api";
 
@@ -9,20 +9,21 @@ interface GnomeLiveEditorProps {
   callId: string;
   gnome: GnomeProfile;
   isCallActive?: boolean;
+  onGnomeUpdated?: () => void;
 }
 
 export const GnomeLiveEditor: React.FC<GnomeLiveEditorProps> = ({
   callId,
   gnome,
   isCallActive = true,
+  onGnomeUpdated,
 }) => {
   const [personalityText, setPersonalityText] = useState(gnome.personality || "");
-  const [feedbackPrompt, setFeedbackPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleApplyUpdate = async (e?: React.FormEvent) => {
+  const handleSavePersonality = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!callId) return;
 
@@ -33,11 +34,10 @@ export const GnomeLiveEditor: React.FC<GnomeLiveEditorProps> = ({
     try {
       await updateGnomeLive(callId, {
         personality: personalityText.trim() || undefined,
-        feedback: feedbackPrompt.trim() || undefined,
       });
 
-      setSuccessMsg("Gnome instructions updated in real-time.");
-      setFeedbackPrompt("");
+      setSuccessMsg("Gnome personality updated in real-time.");
+      if (onGnomeUpdated) onGnomeUpdated();
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to update Gnome.";
@@ -47,17 +47,13 @@ export const GnomeLiveEditor: React.FC<GnomeLiveEditorProps> = ({
     }
   };
 
-  const handleQuickInject = (cue: string) => {
-    setFeedbackPrompt(cue);
-  };
-
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-lg space-y-5">
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-lg space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
         <div className="flex items-center gap-2">
           <Sliders className="w-4 h-4 text-emerald-400" />
-          <h3 className="text-sm font-bold text-zinc-100">Live Gnome Controls</h3>
+          <h3 className="text-sm font-bold text-zinc-100">Gnome Persona &amp; Demeanor</h3>
         </div>
         {isCallActive ? (
           <span className="text-[10px] text-emerald-400 font-mono px-2 py-0.5 rounded bg-emerald-950/40 border border-emerald-800/40">
@@ -70,7 +66,7 @@ export const GnomeLiveEditor: React.FC<GnomeLiveEditorProps> = ({
         )}
       </div>
 
-      {/* Assigned Gnome Profile (Call-specific) */}
+      {/* Assigned Gnome Profile */}
       <div className="p-3.5 rounded-xl bg-zinc-950/60 border border-zinc-800/80 space-y-2">
         <div className="flex items-center gap-2">
           <UserCheck className="w-4 h-4 text-emerald-400" />
@@ -100,16 +96,15 @@ export const GnomeLiveEditor: React.FC<GnomeLiveEditorProps> = ({
         </div>
       )}
 
-      {/* Live Form */}
-      <form onSubmit={handleApplyUpdate} className="space-y-4">
-        {/* Dynamic Personality Tweaker */}
+      {/* Personality Form */}
+      <form onSubmit={handleSavePersonality} className="space-y-3">
         <div>
           <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
             Live Personality &amp; Demeanor
           </label>
           <textarea
             disabled={!isCallActive || submitting}
-            rows={2}
+            rows={3}
             value={personalityText}
             onChange={(e) => setPersonalityText(e.target.value)}
             placeholder="e.g. Speaks slowly, tangents into gardening stories, mildly confused..."
@@ -117,80 +112,21 @@ export const GnomeLiveEditor: React.FC<GnomeLiveEditorProps> = ({
           />
         </div>
 
-        {/* Live Cue / Prompt Injection */}
-        <div>
-          <label className="block text-xs font-semibold text-zinc-300 mb-1.5 flex items-center justify-between">
-            <span>Direct Prompt Injection / Feedback</span>
-            <span className="text-[10px] text-zinc-500 font-normal">Real-time cue</span>
-          </label>
-          <div className="relative">
-            <textarea
-              disabled={!isCallActive || submitting}
-              rows={3}
-              value={feedbackPrompt}
-              onChange={(e) => setFeedbackPrompt(e.target.value)}
-              placeholder="Inject an instruction (e.g. 'Tell him you have to check if your microwave is on fire', 'Trigger recursive verification loop')..."
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-emerald-500/80 disabled:opacity-50 resize-none font-sans"
-            />
-          </div>
-        </div>
-
-        {/* Quick Tactic Cues */}
-        {isCallActive && (
-          <div className="space-y-1.5">
-            <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">
-              Quick Tactic Injections
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => handleQuickInject("Inject an infinite loop about needing to find your reading glasses.")}
-                className="text-[11px] px-2 py-1 rounded bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 border border-zinc-700/50 transition-colors"
-              >
-                👓 Reading Glasses Loop
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickInject("Ask him to speak to his supervisor to confirm his badge ID.")}
-                className="text-[11px] px-2 py-1 rounded bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 border border-zinc-700/50 transition-colors"
-              >
-                👔 Demand Supervisor
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickInject("Pretend the connection is breaking up and make static noises.")}
-                className="text-[11px] px-2 py-1 rounded bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 border border-zinc-700/50 transition-colors"
-              >
-                📻 Static Feign
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickInject("Ask why your computer screen has a picture of a golden retriever on it.")}
-                className="text-[11px] px-2 py-1 rounded bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 border border-zinc-700/50 transition-colors"
-              >
-                🐕 Confusion Tangent
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Submit Button */}
         {isCallActive && (
           <button
             type="submit"
             disabled={submitting}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-colors disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-colors disabled:opacity-50"
           >
             {submitting ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
             ) : (
-              <Send className="w-3.5 h-3.5" />
+              <Check className="w-3.5 h-3.5" />
             )}
-            Apply Live Edits to Gnome
+            Save Personality Changes
           </button>
         )}
       </form>
     </div>
   );
 };
-
