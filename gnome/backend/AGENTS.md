@@ -174,6 +174,15 @@ Environment notes:
 - Working models as of Oct 2026: `GEMINI_LIVE_MODEL=gemini-3.8-live` (supports AUDIO output only, so
   `GEMINI_LIVE_MODALITY=AUDIO`; we voice its transcript with ElevenLabs) and `GEMINI_MODEL=gemini-3.5-flash-lite`
   for persona generation (~2 s; bigger models took 12 s+ and leave the caller in silence).
+- **Turn-taking rules** (set in `GnomeAgent._live_config` and `wait_for_caller_silence`): the gnome never
+  speaks first; it waits for the caller to talk and then leave `CALLER_SILENCE_MS` (1500) of silence, checked
+  both by Gemini's turn detection and by the caller's audio level. Once speaking, it is not interruptible
+  (`ActivityHandling.NO_INTERRUPTION`): it finishes its thought even if the caller talks over it.
+- **No dead air mid-reply:** Gemini's end-of-turn can arrive many seconds after its last words, and
+  ElevenLabs holds text until it has a batch. `_Utterance` flushes ElevenLabs at clause ends and after
+  0.35 s without new text, holds 1 s of audio before playback starts, and drops tiny audio scraps that
+  arrive after the gnome went quiet. Without this, the caller hears silence, the scammer bot starts
+  talking, and the gnome then talks over it.
 - **Call simulator:** with the server running, open `/demo` in a browser. It plays the part of Twilio (mic or typed
   caller input over `/ws/twilio`) and shows the same `/ws/live` feed the frontend gets. Set `ENABLE_DEMO=false` to disable it.
 

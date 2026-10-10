@@ -35,9 +35,16 @@ class TTSStream:
             "generation_config": {"chunk_length_schedule": [50, 90, 120, 160]},
         }))
 
-    async def send_text(self, text: str) -> None:
+    async def send_text(self, text: str, flush: bool = False) -> None:
         if self._ws is not None and text:
-            await self._ws.send(json.dumps({"text": text if text.endswith(" ") else text + " "}))
+            msg = {"text": text if text.endswith(" ") else text + " "}
+            if flush:
+                msg["flush"] = True  # speak everything buffered now instead of waiting for more text
+            await self._ws.send(json.dumps(msg))
+
+    async def flush(self) -> None:
+        if self._ws is not None:
+            await self._ws.send(json.dumps({"text": " ", "flush": True}))
 
     async def finish(self) -> None:
         """No more text for this utterance; ElevenLabs flushes and then closes."""

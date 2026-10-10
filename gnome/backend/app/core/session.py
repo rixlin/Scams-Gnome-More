@@ -64,6 +64,9 @@ class CallSession:
     def elapsed(self) -> float:
         return time.monotonic() - self._started_mono
 
+    def seconds_since_caller_voice(self) -> float:
+        return time.monotonic() - self._last_caller_voice
+
     @property
     def active_speaker(self) -> ActiveSpeaker:
         if self.gnome_speaking:

@@ -10,6 +10,7 @@ import itertools
 import logging
 import random
 import re
+import time
 
 import numpy as np
 from google.genai import types
@@ -25,6 +26,16 @@ log = logging.getLogger(__name__)
 GEMINI_INPUT_RATE = 16000
 _FRAMES_PER_SEND = 5  # 5 x 20 ms Twilio frames = 100 ms per Gemini audio message
 _RECONNECT_BACKOFF_S = (1, 2, 5, 10)
+# ElevenLabs holds text until it has a batch of characters. Gemini's end-of-turn can come many seconds
+# after its last words, so without flushing, the tail of a sentence sits unspoken and the caller hears a
+# long silence mid-reply. Flush at clause ends, and whenever no new text has arrived for a moment.
+_CLAUSE_END = re.compile(r"[.!?,;:\u2014\u2026]\s*$")
+_TTS_IDLE_FLUSH_S = 0.35
+# Seconds of gnome audio buffered before playback starts, so the line never goes quiet mid-sentence
+_PREBUFFER_S = 1.0
+# A scrap of audio this short that arrives after the gnome already went quiet is dropped, so the caller
+# doesn't hear a stray blip once they have started talking
+_LATE_SCRAP_S = 0.15
 
 
 class StageDirectionFilter:
@@ -81,8 +92,19 @@ class _Utterance:
         try:
             await tts.open()
             pump = asyncio.create_task(self._pump_audio(tts))
-            while (chunk := await self._text_q.get()) is not None:
-                await tts.send_text(chunk)
+            pending = False  # text sent to ElevenLabs but not flushed yet
+            while True:
+                try:
+                    chunk = await asyncio.wait_for(self._text_q.get(), _TTS_IDLE_FLUSH_S if pending else None)
+                except TimeoutError:
+                    await tts.flush()
+                    pending = False
+                    continue
+                if chunk is None:
+                    break
+                flush = bool(_CLAUSE_END.search(chunk))
+                await tts.send_text(chunk, flush=flush)
+                pending = not flush
             await tts.finish()
             await pump
         except asyncio.CancelledError:
@@ -99,23 +121,50 @@ class _Utterance:
     async def _pump_audio(self, tts: TTSStream) -> None:
         session = self.agent.session
         sent_any = False
+        # Head start: hold the first audio until _PREBUFFER_S is ready (or the reply is shorter than that),
+        # so playback never starts on a tiny chunk and then stalls while the next one is generated.
+        held: list[bytes] = []
+        self._play_end = 0.0  # monotonic time when the audio sent so far finishes playing on the call
         async for ulaw in tts.audio():
             if not sent_any:
+                held.append(ulaw)
+                if sum(map(len, held)) < _PREBUFFER_S * SAMPLE_RATE:
+                    continue
+                await self._start_speaking()
                 sent_any = True
-                session.set_state("speaking")
-                session.set_gnome_speaking(True)
-            pcm = audio.ulaw_to_pcm16(ulaw)
-            session.add_gnome_audio(pcm)
-            await self.agent.send_twilio({"event": "media", "media": {"payload": base64.b64encode(ulaw).decode()}})
-            session.publish("audio.gnome", {
-                "pcm16": base64.b64encode(pcm.tobytes()).decode(), "sample_rate": SAMPLE_RATE,
-            })
+                for chunk in held:
+                    await self._send_audio(chunk)
+                held.clear()
+                continue
+            if time.monotonic() > self._play_end and len(ulaw) < _LATE_SCRAP_S * SAMPLE_RATE:
+                continue
+            await self._send_audio(ulaw)
+        if held:  # the whole reply was shorter than the head start
+            await self._start_speaking()
+            sent_any = True
+            for chunk in held:
+                await self._send_audio(chunk)
         if sent_any:
             # Twilio echoes this mark back once playback reaches it
             self.agent.pending_mark = self.mark
             await self.agent.send_twilio({"event": "mark", "mark": {"name": self.mark}})
         else:
             session.set_state("listening")
+
+    async def _start_speaking(self) -> None:
+        await self.agent.wait_for_caller_silence()
+        self.agent.session.set_state("speaking")
+        self.agent.session.set_gnome_speaking(True)
+
+    async def _send_audio(self, ulaw: bytes) -> None:
+        session = self.agent.session
+        self._play_end = max(self._play_end, time.monotonic()) + len(ulaw) / SAMPLE_RATE
+        pcm = audio.ulaw_to_pcm16(ulaw)
+        session.add_gnome_audio(pcm)
+        await self.agent.send_twilio({"event": "media", "media": {"payload": base64.b64encode(ulaw).decode()}})
+        session.publish("audio.gnome", {
+            "pcm16": base64.b64encode(pcm.tobytes()).decode(), "sample_rate": SAMPLE_RATE,
+        })
 
 
 class GnomeAgent:
@@ -129,7 +178,7 @@ class GnomeAgent:
         self._utterance: _Utterance | None = None
         self._utt_counter = itertools.count(1)
         self._caller_buf = ""
-        self._greeted = False
+        self._connected_before = False  # reconnects carry the transcript so far
         self._stage_filter = StageDirectionFilter()
 
     # ---- inputs from the Twilio socket ----
@@ -154,6 +203,16 @@ class GnomeAgent:
             self._warned.add(source)
             log.warning("call %s: %s", self.session.id, message)
             self.session.publish("error", {"source": source, "message": message})
+
+    async def wait_for_caller_silence(self) -> None:
+        """Hold the gnome's reply until the caller has been quiet for CALLER_SILENCE_MS.
+
+        Gemini's own turn detection is set to the same silence, but it sometimes decides the caller is done
+        early; this checks the caller's actual audio level before the gnome makes a sound.
+        """
+        need = get_config().caller_silence_ms / 1000
+        while (quiet := self.session.seconds_since_caller_voice()) < need:
+            await asyncio.sleep(need - quiet)
 
     def on_mark(self, name: str) -> None:
         if name == self.pending_mark:
@@ -202,7 +261,7 @@ class GnomeAgent:
             aggression=st["aggression"],
             default_personality=st["default_personality"],
             personality_override=s.personality_override,
-            history=s.transcript if self._greeted else None,
+            history=s.transcript if self._connected_before else None,
         )
         modality = cfg.gemini_live_modality.upper()
         return types.LiveConnectConfig(
@@ -210,18 +269,22 @@ class GnomeAgent:
             system_instruction=system,
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig() if modality == "AUDIO" else None,
+            realtime_input_config=types.RealtimeInputConfig(
+                # Only treat the caller's turn as over after this much silence
+                automatic_activity_detection=types.AutomaticActivityDetection(
+                    silence_duration_ms=cfg.caller_silence_ms,
+                ),
+                # The caller talking over the gnome doesn't cut him off; he finishes his thought first
+                activity_handling=types.ActivityHandling.NO_INTERRUPTION,
+            ),
         )
 
     async def _live_session(self) -> None:
         cfg = get_config()
         async with llm.client().aio.live.connect(model=cfg.gemini_live_model, config=self._live_config()) as live:
             log.info("Gemini Live connected for call %s", self.session.id)
-            if not self._greeted:
-                self._greeted = True
-                await live.send_client_content(
-                    turns=types.Content(role="user", parts=[types.Part(text=prompts.GREETING_CUE)]),
-                    turn_complete=True,
-                )
+            # No greeting: the gnome stays quiet until the caller has spoken and finished their thought
+            self._connected_before = True
             async with asyncio.TaskGroup() as tg:
                 tg.create_task(self._send_audio(live))
                 tg.create_task(self._send_caller_text(live))

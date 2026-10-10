@@ -99,11 +99,6 @@ def personality_note(text: str) -> str:
     )
 
 
-GREETING_CUE = (
-    "[The phone is ringing and you have just picked it up. Answer it in character with a short greeting. "
-    "This cue was not said by the caller.]"
-)
-
 STALL_LINES = [
     "Oh dear, hold on, a snail has climbed onto the telephone. What were you saying?",
     "Sorry, sorry, the flamingo next door is making a racket. Could you say that again?",

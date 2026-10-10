@@ -34,6 +34,8 @@ class Config(BaseSettings):
     # "TEXT": Live model returns text directly (half-cascade models).
     # "AUDIO": Live model returns audio; we discard it and voice its transcript (native-audio models).
     gemini_live_modality: str = "AUDIO"
+    # The gnome only replies after the caller has been silent this long, so it doesn't cut them off
+    caller_silence_ms: int = 1500
 
     elevenlabs_api_key: str = "PLACEHOLDER_ELEVENLABS_API_KEY"
     # One voice id or several separated by commas (numbered ELEVENLABS_VOICE_ID1, _ID2, ... also work);
