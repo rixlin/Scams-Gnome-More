@@ -23,10 +23,13 @@ log = logging.getLogger("gnome")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cfg = get_config()
+    optional = {"cloudflare_tunnel", "elevenlabs_voice_id"}  # voice ids may come from numbered keys instead
     missing = [
-        name for name, value in cfg.model_dump().items()
-        if isinstance(value, str) and is_placeholder(value)
+        name for name in type(cfg).model_fields
+        if name not in optional and isinstance(getattr(cfg, name), str) and is_placeholder(getattr(cfg, name))
     ]
+    if not cfg.elevenlabs_voice_ids:
+        missing.append("elevenlabs_voice_id")
     if missing:
         log.warning("placeholder config values (features using them will fail): %s", ", ".join(missing))
     await repo.connect()

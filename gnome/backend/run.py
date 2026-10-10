@@ -1,11 +1,14 @@
-"""Start a Cloudflare quick tunnel + the backend, wiring the new tunnel URL in automatically.
+"""Start the Cloudflare tunnel + the backend, and point Twilio at it.
 
     .venv\\Scripts\\python run.py
 
-1. Starts `cloudflared tunnel --url http://localhost:PORT` and waits for its *.trycloudflare.com URL
-2. Writes that URL to PUBLIC_BASE_URL in .env
-3. Points your Twilio number's voice webhook + status callback at the new URL (if Twilio keys are set)
-4. Starts the FastAPI server; Ctrl+C stops both
+Named tunnel (CLOUDFLARE_TUNNEL set in .env): runs that tunnel, which serves the fixed hostname in
+PUBLIC_BASE_URL, so the address never changes.
+Quick tunnel (no CLOUDFLARE_TUNNEL): starts a throwaway *.trycloudflare.com tunnel and writes its new
+URL to PUBLIC_BASE_URL in .env.
+
+Either way it then points your Twilio number's webhooks at PUBLIC_BASE_URL (if Twilio keys are set)
+and starts the FastAPI server. Ctrl+C stops both.
 """
 
 import os
@@ -35,7 +38,29 @@ def find_cloudflared() -> str:
     return found
 
 
-def start_tunnel() -> tuple[subprocess.Popen, str]:
+def load_config():
+    sys.path.insert(0, str(BACKEND_DIR))
+    from app.config import Config
+
+    return Config()
+
+
+def start_named_tunnel(name: str) -> subprocess.Popen:
+    """Run an existing named tunnel; returns once Cloudflare has registered a connection."""
+    proc = subprocess.Popen(
+        [find_cloudflared(), "tunnel", "--no-autoupdate", "run", "--url", f"http://localhost:{PORT}", name],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+    )
+    output = []
+    for line in proc.stdout:
+        output.append(line.rstrip())
+        if "Registered tunnel connection" in line:
+            threading.Thread(target=lambda: [None for _ in proc.stdout], daemon=True).start()
+            return proc
+    sys.exit(f"cloudflared tunnel '{name}' exited before connecting:\n" + "\n".join(output[-15:]))
+
+
+def start_quick_tunnel() -> tuple[subprocess.Popen, str]:
     proc = subprocess.Popen(
         [find_cloudflared(), "tunnel", "--url", f"http://localhost:{PORT}"],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
@@ -115,11 +140,21 @@ def port_in_use(port: int) -> bool:
 def main() -> None:
     if port_in_use(PORT):
         sys.exit(f"Port {PORT} is already in use. Stop the other backend (or set PORT=...) and run again.")
-    print("Starting Cloudflare tunnel...")
-    tunnel, url = start_tunnel()
-    print(f"  Tunnel URL: {url}")
-    write_env(url)
-    print("  Wrote PUBLIC_BASE_URL to .env")
+    cfg = load_config()
+    if cfg.cloudflare_tunnel:
+        url = cfg.public_base_url.rstrip("/")
+        if "trycloudflare.com" in url or not url.startswith("https://"):
+            sys.exit(f"CLOUDFLARE_TUNNEL is set, but PUBLIC_BASE_URL is {url!r}. Set it to your tunnel's "
+                     "hostname in .env, e.g. PUBLIC_BASE_URL=https://api.gnomegrove.tech")
+        print(f"Starting named Cloudflare tunnel '{cfg.cloudflare_tunnel}' for {url} ...")
+        tunnel = start_named_tunnel(cfg.cloudflare_tunnel)
+        print("  Tunnel connected")
+    else:
+        print("Starting Cloudflare quick tunnel...")
+        tunnel, url = start_quick_tunnel()
+        print(f"  Tunnel URL: {url}")
+        write_env(url)
+        print("  Wrote PUBLIC_BASE_URL to .env")
     update_twilio(url)
 
     print(f"Starting backend on port {PORT} (Ctrl+C to stop)...")

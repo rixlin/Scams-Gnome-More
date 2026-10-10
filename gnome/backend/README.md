@@ -19,6 +19,22 @@ In the Twilio console, for your number:
 
 Then forward spam calls from your phone to the Twilio number.
 
+### Permanent address (named tunnel)
+
+The backend is served at **https://api.gnomegrove.tech** through the named Cloudflare tunnel `gnome`
+(credentials live in `~/.cloudflared/`, not in the repo). With these in `.env`, `run.py` runs that
+tunnel instead of a throwaway quick tunnel, and the Twilio webhooks stay the same between restarts:
+
+```
+PUBLIC_BASE_URL=https://api.gnomegrove.tech
+CLOUDFLARE_TUNNEL=gnome
+```
+
+One-time setup that was used (already done):
+`cloudflared tunnel login`, `cloudflared tunnel create gnome`,
+`cloudflared tunnel route dns gnome api.gnomegrove.tech`.
+Leave `CLOUDFLARE_TUNNEL` empty to fall back to a new quick tunnel on every run.
+
 ## Test
 
 ```sh

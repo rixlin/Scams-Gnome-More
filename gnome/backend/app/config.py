@@ -18,6 +18,8 @@ class Config(BaseSettings):
 
     # Public hostname from the Cloudflare tunnel, e.g. https://gnome.example.com
     public_base_url: str = "http://localhost:8000"
+    # Name of a named Cloudflare tunnel (fixed hostname). Empty = run.py uses a throwaway quick tunnel
+    cloudflare_tunnel: str = ""
 
     twilio_account_sid: str = "PLACEHOLDER_TWILIO_ACCOUNT_SID"
     twilio_auth_token: str = "PLACEHOLDER_TWILIO_AUTH_TOKEN"
