@@ -175,6 +175,17 @@ async def voice_respond(
 
 
 
+def _cleanup_call_audio(call_sid: str) -> None:
+    """Delete cached audio files for a completed call."""
+    if not call_sid:
+        return
+    for audio_file in _AUDIO_DIR.glob(f"{call_sid}*"):
+        try:
+            audio_file.unlink(missing_ok=True)
+        except Exception as e:
+            print(f"[Audio cleanup error]: {e}")
+
+
 @app.post("/voice/status")
 async def voice_status(
     CallSid: str = Form(""),
@@ -188,6 +199,10 @@ async def voice_status(
     if record:
         record.complete(status=CallStatus)
         _interpreter.log_call(record)
+
+    # Clean up audio files if call has reached a terminal state
+    if CallStatus in ("completed", "busy", "no-answer", "canceled", "failed"):
+        _cleanup_call_audio(CallSid)
 
     return PlainTextResponse("OK")
 
@@ -241,6 +256,31 @@ async def initiate_call(
         return {"call_sid": call.sid, "status": call.status}
     except Exception as exc:
         from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/calls/{call_sid}/hangup")
+async def hangup_call(call_sid: str):
+    """
+    Terminate an active call using the Twilio REST API.
+    """
+    from twilio.rest import Client as TwilioClient
+    from fastapi import HTTPException
+
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+
+    # Mark local record as completed if present
+    record = _records.get(call_sid)
+    if record:
+        record.complete(status="completed-by-user")
+        _interpreter.log_call(record)
+
+    try:
+        client = TwilioClient(account_sid, auth_token)
+        call = client.calls(call_sid).update(status="completed")
+        return {"call_sid": call.sid, "status": call.status}
+    except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
