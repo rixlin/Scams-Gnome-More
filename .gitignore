@@ -1,2 +1,5 @@
 gnome/backend/.env
 attacker/.env
+.venv/
+__pycache__/
+.pytest_cache/

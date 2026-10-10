@@ -19,7 +19,7 @@ Frontend ──REST /api/*──> FastAPI ──> Tiger Data (on call end)
 - `google-genai` (Gemini; Live API for realtime)
 - `elevenlabs` SDK / ElevenLabs streaming TTS WebSocket
 - `asyncpg` (or SQLAlchemy 2.0 async) for Tiger Data, `pydantic-settings` for config
-- `audioop-lts` / `numpy` for μ-law ↔ PCM conversion and resampling
+- `numpy` for μ-law ↔ PCM conversion and resampling (hand-rolled in `core/audio.py`; stdlib `audioop` is gone in 3.13+)
 - `cloudflared` for the public tunnel (run outside Python)
 
 ## Directory layout
@@ -76,6 +76,7 @@ All `/api/*` routes need `Authorization: Bearer $API_TOKEN`. `/twilio/*` routes 
 | POST | `/api/calls/{call_id}/gnome/feedback` | Live coaching sent mid-call, e.g. "ask about their cat". Added to the agent's context as an operator note for the next turn. |
 | POST | `/api/calls/{call_id}/gnome/personality` | Change the persona mid-call (traits/tone, optional new voice id). Updates the system prompt for the next turn. |
 | POST | `/api/calls/{call_id}/terminate` | Hang up: `twilio.calls(call_sid).update(status="completed")`, then run the end-of-call flow. |
+| GET | `/api/calls/active` | Calls in progress right now (call_id, caller, gnome, elapsed). |
 | GET | `/api/calls` | Paginated call history: id, start/end time, duration, caller number, gnome name. |
 | GET | `/api/calls/{call_id}` | Call details: gnome (name, backstory, personality) and the ordered transcript utterances. |
 | GET | `/api/calls/{call_id}/audio` | Stream the stored call recording (WAV). |
@@ -165,6 +166,19 @@ Required fields map to: which gnome is talking → `utterances.gnome_id`/`calls.
 6. **Control API:** feedback, personality, terminate, settings.
 7. **Persistence:** Tiger Data schema, end-of-call save, history/detail/audio GETs.
 8. **Polish:** barge-in, a max-call-length timer, error handling (an LLM or TTS failure falls back to a canned stalling line), tests.
+
+## Implementation status
+Milestones 1–8 are implemented. Everything that runs without API keys is covered by `pytest`
+(audio codec, recording alignment, REST routes, Twilio/live WebSocket flow, agent turn handling
+with a fake Gemini/ElevenLabs). Still to verify with real keys: Gemini Live end to end, ElevenLabs
+TTS, Twilio over the tunnel, and Tiger Data persistence.
+
+Environment notes:
+- The venv is **Python 3.15**. Many packages lack wheels with C extensions, so install with
+  `pip install --only-binary=:all: -r requirements.txt`. Do not use `uvicorn[standard]` (pulls pyyaml, which needs MSVC).
+- `.env` values starting with `PLACEHOLDER` count as unset. The DB is optional at runtime: without it, live calls work
+  but history endpoints return 503 and calls are not persisted.
+- If the configured Live model only supports audio output, set `GEMINI_LIVE_MODALITY=AUDIO`.
 
 ## Conventions for agents working here
 - Everything is async. Never block the event loop in the audio path (no sync HTTP or DB calls there).
