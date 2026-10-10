@@ -42,7 +42,10 @@ class FakeLive:
 @pytest.mark.parametrize("modality", ["TEXT", "AUDIO"])
 def test_turn_produces_transcript_audio_and_mark(monkeypatch, modality):
     monkeypatch.setattr(gnome_mod, "TTSStream", FakeTTS)
-    monkeypatch.setattr(gnome_mod.get_config(), "gemini_live_modality", modality)
+    cfg = gnome_mod.get_config()
+    monkeypatch.setattr(cfg, "gemini_live_modality", modality)
+    monkeypatch.setattr(cfg, "elevenlabs_api_key", "test-key")
+    monkeypatch.setattr(cfg, "elevenlabs_voice_id", "test-voice")
 
     def gnome_text(t, **kw):
         if modality == "TEXT":

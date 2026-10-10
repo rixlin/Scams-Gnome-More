@@ -13,6 +13,7 @@ from app.api import calls, gnome, settings, twilio_hooks
 from app.config import get_config, is_placeholder
 from app.core import lifecycle, registry, settings_store
 from app.db import repo
+from app.demo import router as demo
 from app.ws import live, twilio_stream
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -43,6 +44,8 @@ app.include_router(calls.router)
 app.include_router(twilio_hooks.router)
 app.include_router(twilio_stream.router)
 app.include_router(live.router)
+if get_config().enable_demo:
+    app.include_router(demo.router)
 
 
 @app.get("/health")

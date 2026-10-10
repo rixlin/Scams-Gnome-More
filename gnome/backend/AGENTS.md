@@ -177,7 +177,11 @@ Environment notes:
   `pip install --only-binary=:all: -r requirements.txt`. Do not use `uvicorn[standard]` (pulls pyyaml, which needs MSVC).
 - `.env` values starting with `PLACEHOLDER` count as unset. The DB is optional at runtime: without it, live calls work
   but history endpoints return 503 and calls are not persisted.
-- If the configured Live model only supports audio output, set `GEMINI_LIVE_MODALITY=AUDIO`.
+- Working models as of Oct 2026: `GEMINI_LIVE_MODEL=gemini-3.8-live` (supports AUDIO output only, so
+  `GEMINI_LIVE_MODALITY=AUDIO`; we voice its transcript with ElevenLabs) and `GEMINI_MODEL=gemini-3.5-flash-lite`
+  for persona generation (~2 s; bigger models took 12 s+ and leave the caller in silence).
+- **Call simulator:** with the server running, open `/demo` in a browser. It plays the part of Twilio (mic or typed
+  caller input over `/ws/twilio`) and shows the same `/ws/live` feed the frontend gets. Set `ENABLE_DEMO=false` to disable it.
 
 ## Conventions for agents working here
 - Everything is async. Never block the event loop in the audio path (no sync HTTP or DB calls there).

@@ -6,13 +6,15 @@ from google.genai import types
 
 from app.agent import llm
 from app.agent.prompts import FALLBACK_PERSONA, PERSONA_PROMPT
-from app.config import get_config
+from app.config import get_config, is_placeholder
 from app.models import Persona
 
 log = logging.getLogger(__name__)
 
 
 async def generate_persona(guidance: str = "") -> Persona:
+    if is_placeholder(get_config().gemini_api_key):
+        return FALLBACK_PERSONA
     prompt = PERSONA_PROMPT.format(guidance=f"Operator guidance: {guidance}" if guidance else "")
     try:
         resp = await llm.client().aio.models.generate_content(

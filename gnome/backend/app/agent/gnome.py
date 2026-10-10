@@ -15,7 +15,7 @@ from google.genai import types
 
 from app.agent import llm, prompts
 from app.agent.voice import TTSStream
-from app.config import get_config
+from app.config import get_config, is_placeholder
 from app.core import audio, settings_store
 from app.core.session import SAMPLE_RATE, CallSession
 
@@ -49,7 +49,14 @@ class _Utterance:
 
     async def _run(self) -> None:
         session = self.agent.session
-        tts = TTSStream(session.voice_id or settings_store.get()["voice_id"])
+        cfg = get_config()
+        voice_id = session.voice_id or settings_store.get()["voice_id"] or cfg.elevenlabs_voice_id
+        if is_placeholder(cfg.elevenlabs_api_key) or is_placeholder(voice_id):
+            # No voice configured: the reply still shows up in the transcript, it just isn't spoken
+            self.agent.warn_once("tts", "ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID not set; the gnome can't speak yet")
+            session.set_state("listening")
+            return
+        tts = TTSStream(voice_id)
         pump: asyncio.Task | None = None
         try:
             await tts.open()
@@ -96,6 +103,8 @@ class GnomeAgent:
         self.session = session
         self.pending_mark: str | None = None
         self._audio_q: asyncio.Queue[bytes] = asyncio.Queue(maxsize=50)
+        self._caller_text_q: asyncio.Queue[str] = asyncio.Queue()
+        self._warned: set[str] = set()
         self._frame_buf: list[np.ndarray] = []
         self._utterance: _Utterance | None = None
         self._utt_counter = itertools.count(1)
@@ -115,6 +124,16 @@ class GnomeAgent:
         except asyncio.QueueFull:
             pass  # Gemini is disconnected/reconnecting; drop audio rather than lag behind
 
+    def say_as_caller(self, text: str) -> None:
+        """Typed caller input (call simulator), used instead of speech."""
+        self._caller_text_q.put_nowait(text)
+
+    def warn_once(self, source: str, message: str) -> None:
+        if source not in self._warned:
+            self._warned.add(source)
+            log.warning("call %s: %s", self.session.id, message)
+            self.session.publish("error", {"source": source, "message": message})
+
     def on_mark(self, name: str) -> None:
         if name == self.pending_mark:
             self.pending_mark = None
@@ -132,6 +151,9 @@ class GnomeAgent:
     async def run(self) -> None:
         await self.session.persona_ready.wait()
         self.session.set_state("listening")
+        if is_placeholder(get_config().gemini_api_key):
+            self.warn_once("llm", "GEMINI_API_KEY not set; the gnome can't think yet")
+            return
         attempt = 0
         while not self.session.ended:
             try:
@@ -181,6 +203,7 @@ class GnomeAgent:
                 )
             async with asyncio.TaskGroup() as tg:
                 tg.create_task(self._send_audio(live))
+                tg.create_task(self._send_caller_text(live))
                 tg.create_task(self._send_operator_notes(live))
                 tg.create_task(self._receive(live))
 
@@ -190,6 +213,13 @@ class GnomeAgent:
             await live.send_realtime_input(
                 audio=types.Blob(data=data, mime_type=f"audio/pcm;rate={GEMINI_INPUT_RATE}")
             )
+
+    async def _send_caller_text(self, live) -> None:
+        while True:
+            text = await self._caller_text_q.get()
+            self._flush_caller()
+            self.session.add_utterance("caller", text)
+            await live.send_realtime_input(text=text)
 
     async def _send_operator_notes(self, live) -> None:
         while True:

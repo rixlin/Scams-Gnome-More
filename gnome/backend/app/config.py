@@ -24,16 +24,19 @@ class Config(BaseSettings):
 
     gemini_api_key: str = "PLACEHOLDER_GEMINI_API_KEY"
     # Model for one-shot calls (persona generation)
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.5-flash-lite"
     # Model for the realtime Live API conversation
-    gemini_live_model: str = "gemini-live-2.5-flash-preview"
+    gemini_live_model: str = "gemini-3.8-live"
     # "TEXT": Live model returns text directly (half-cascade models).
     # "AUDIO": Live model returns audio; we discard it and voice its transcript (native-audio models).
-    gemini_live_modality: str = "TEXT"
+    gemini_live_modality: str = "AUDIO"
 
     elevenlabs_api_key: str = "PLACEHOLDER_ELEVENLABS_API_KEY"
     elevenlabs_voice_id: str = "PLACEHOLDER_ELEVENLABS_VOICE_ID"
     elevenlabs_model: str = "eleven_flash_v2_5"
+
+    # Serve the browser call simulator at /demo (no auth; disable for anything public-facing)
+    enable_demo: bool = True
 
     # Tiger Data service URL (postgres://...?sslmode=require)
     database_url: str = "PLACEHOLDER_DATABASE_URL"
