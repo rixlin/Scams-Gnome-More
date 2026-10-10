@@ -98,7 +98,7 @@ function CallSessionContent() {
   const turnsCount = transcript.length > 0 ? transcript.length : call?.transcript?.length || 0;
 
   return (
-    <div className="h-screen max-h-screen bg-black text-zinc-100 flex flex-col font-sans w-full overflow-hidden">
+    <div className="h-screen max-h-screen bg-canvas text-zinc-100 flex flex-col font-sans w-full overflow-hidden">
       <Navbar />
 
       <main className="w-full px-4 sm:px-6 xl:px-8 py-3 flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -214,7 +214,7 @@ export default function CallSessionPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-black text-zinc-100 flex items-center justify-center p-20 gap-2">
+        <div className="min-h-screen bg-canvas text-zinc-100 flex items-center justify-center p-20 gap-2">
           <RefreshCw className="w-5 h-5 animate-spin text-emerald-400" />
           <span className="text-sm text-zinc-400">Loading call console...</span>
         </div>

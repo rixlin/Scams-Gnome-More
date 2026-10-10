@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "../components/theme/ThemeProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,11 +27,35 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
+      data-theme="mythical-dark"
       className={`${geistSans.variable} ${geistMono.variable} h-full dark antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-black text-zinc-100">
-        {children}
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('gnome_theme') || 'mythical-dark';
+                  document.documentElement.setAttribute('data-theme', theme);
+                  if (theme === 'mythical-light' || theme === 'default-light') {
+                    document.documentElement.classList.remove('dark');
+                    document.documentElement.classList.add('light');
+                  } else {
+                    document.documentElement.classList.remove('light');
+                    document.documentElement.classList.add('dark');
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body className="min-h-full flex flex-col bg-canvas text-zinc-100">
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );
 }
+

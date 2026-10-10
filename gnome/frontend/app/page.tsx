@@ -205,7 +205,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-zinc-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-canvas text-zinc-100 flex flex-col font-sans">
       <Navbar
         activeCount={activeCalls.length}
         onAddDebugCall={handleAddDebugCall}
@@ -213,9 +213,9 @@ export default function HomePage() {
 
       <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-8 space-y-10">
         {/* Top Header Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-4 pb-2 border-b border-zinc-900">
+        <div className="flex flex-wrap items-center justify-between gap-4 pb-2 border-b border-zinc-800">
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-white flex items-center gap-2.5">
+            <h1 className="text-2xl font-extrabold tracking-tight text-zinc-100 flex items-center gap-2.5">
               <span>Interception Burrow</span>
             </h1>
             <p className="text-xs text-zinc-400 mt-1">
@@ -229,7 +229,7 @@ export default function HomePage() {
               <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl p-1.5 animate-in fade-in">
                 <button
                   onClick={handleSelectAll}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-300 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-300 hover:text-zinc-100 rounded-lg hover:bg-zinc-800 transition-colors"
                 >
                   {selectedIds.length === allCalls.length && allCalls.length > 0 ? (
                     <>
@@ -262,7 +262,7 @@ export default function HomePage() {
                     setIsSelectionMode(false);
                     setSelectedIds([]);
                   }}
-                  className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+                  className="p-1.5 text-zinc-400 hover:text-zinc-100 rounded-lg hover:bg-zinc-800 transition-colors"
                   title="Cancel selection"
                 >
                   <X className="w-4 h-4" />

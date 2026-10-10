@@ -1,10 +1,23 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { X, Settings as SettingsIcon, Check, AlertCircle, RefreshCw, PlusCircle, Server, Bug } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  X,
+  Settings as SettingsIcon,
+  Check,
+  AlertCircle,
+  RefreshCw,
+  PlusCircle,
+  Server,
+  Bug,
+  Palette,
+  ChevronDown,
+} from "lucide-react";
 import { fetchSettings, updateSettings } from "../../lib/api";
 import { CallSessionSummary } from "../../lib/types";
 import { createSampleDebugCallDetail } from "../../lib/debug-call-generator";
+import { useTheme } from "../theme/ThemeProvider";
+import { THEME_OPTIONS } from "../../lib/theme";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -17,10 +30,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   onAddDebugCall,
 }) => {
-  const [activeTab, setActiveTab] = useState<"system" | "debug">("system");
+  const [activeTab, setActiveTab] = useState<"appearance" | "system" | "debug">("appearance");
   const [loading, setLoading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const { theme, setTheme, currentOption } = useTheme();
+  const [isThemeDropdownOpen, setIsThemeDropdownOpen] = useState(false);
+  const themeDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        themeDropdownRef.current &&
+        !themeDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsThemeDropdownOpen(false);
+      }
+    }
+    if (isThemeDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isThemeDropdownOpen]);
 
   // System Settings state
   const [backendUrl, setBackendUrl] = useState(() => {
@@ -148,12 +183,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setSavedSuccess(false);
     setErrorMessage(null);
     setDebugSuccessMsg(null);
+    setIsThemeDropdownOpen(false);
     onClose();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px] animate-in fade-in duration-150">
-      <div className="relative w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+      <div className="relative w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden h-[540px] max-h-[95vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/60">
           <div className="flex items-center gap-2.5">
@@ -170,6 +206,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Tab Navigation */}
         <div className="flex border-b border-zinc-800 bg-zinc-950/30 px-6 gap-6">
+          <button
+            onClick={() => setActiveTab("appearance")}
+            className={`py-3 text-xs font-semibold border-b-2 flex items-center gap-2 transition-colors ${
+              activeTab === "appearance"
+                ? "border-emerald-500 text-emerald-400"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <Palette className="w-4 h-4" />
+            Appearance
+          </button>
           <button
             onClick={() => setActiveTab("system")}
             className={`py-3 text-xs font-semibold border-b-2 flex items-center gap-2 transition-colors ${
@@ -195,7 +242,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 space-y-5 overflow-y-auto flex-1">
+        <div className="p-6 space-y-5 overflow-y-auto min-h-0 flex-1">
           {errorMessage && (
             <div className="flex items-center gap-2 p-3 text-xs rounded-lg bg-red-950/40 border border-red-800/60 text-red-300">
               <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
@@ -217,11 +264,174 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {activeTab === "debug" ? (
+          {/* TAB 1: APPEARANCE (DROPDOWN MENU) */}
+          {activeTab === "appearance" && (
+            <div className="space-y-4">
+              <div className="space-y-2" ref={themeDropdownRef}>
+                <label className="block text-xs font-semibold text-zinc-300">
+                  Theme
+                </label>
+
+                {/* Dropdown Menu Container */}
+                <div className="relative">
+                  {/* Dropdown Trigger */}
+                  <button
+                    type="button"
+                    onClick={() => setIsThemeDropdownOpen((prev) => !prev)}
+                    className="w-full bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded-xl px-4 py-3 flex items-center justify-between text-xs text-zinc-100 transition-colors focus:outline-none focus:border-emerald-500/80"
+                  >
+                    {/* Left: Theme Name + Badge */}
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-zinc-100 text-sm">
+                        {currentOption.name}
+                      </span>
+                      {currentOption.badge && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                          {currentOption.badge}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Right: Swatches + Chevron */}
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        {currentOption.swatches.map((color, idx) => (
+                          <span
+                            key={idx}
+                            className="w-4 h-4 rounded border border-white/25 shadow-xs shrink-0"
+                            style={{ backgroundColor: color }}
+                          />
+                        ))}
+                      </div>
+                      <ChevronDown
+                        className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${
+                          isThemeDropdownOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </div>
+                  </button>
+
+                  {/* Dropdown Options List */}
+                  {isThemeDropdownOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1.5 z-40 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden py-1 divide-y divide-zinc-900 animate-in fade-in duration-100">
+                      {THEME_OPTIONS.map((opt) => {
+                        const isSelected = theme === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              setTheme(opt.id);
+                              setIsThemeDropdownOpen(false);
+                            }}
+                            className={`w-full px-4 py-3 flex items-center justify-between text-xs transition-colors hover:bg-zinc-900 text-left ${
+                              isSelected
+                                ? "bg-zinc-900/80 text-emerald-400 font-semibold"
+                                : "text-zinc-200"
+                            }`}
+                          >
+                            {/* Left: Theme Name + Badge */}
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`text-sm ${
+                                  isSelected ? "text-emerald-400 font-bold" : "text-zinc-200"
+                                }`}
+                              >
+                                {opt.name}
+                              </span>
+                              {opt.badge && (
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60">
+                                  {opt.badge}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Right: Swatches */}
+                            <div className="flex items-center gap-1.5">
+                              {opt.swatches.map((color, idx) => (
+                                <span
+                                  key={idx}
+                                  className="w-4 h-4 rounded border border-white/25 shadow-xs shrink-0"
+                                  style={{ backgroundColor: color }}
+                                />
+                              ))}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: SYSTEM & SERVER */}
+          {activeTab === "system" && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Gnome Backend REST URL
+                </label>
+                <input
+                  type="text"
+                  value={backendUrl}
+                  onChange={(e) => setBackendUrl(e.target.value)}
+                  placeholder="http://localhost:8000"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Gnome Backend WebSocket Base URL
+                </label>
+                <input
+                  type="text"
+                  value={wsUrl}
+                  onChange={(e) => setWsUrl(e.target.value)}
+                  placeholder="ws://localhost:8000"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Auto-Terminate Safety Timeout (Seconds)
+                </label>
+                <input
+                  type="number"
+                  value={autoTerminateSeconds}
+                  onChange={(e) => setAutoTerminateSeconds(Number(e.target.value))}
+                  placeholder="1800"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleSaveSystemSettings}
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50"
+                >
+                  {loading ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  Save Server Settings
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: DEBUG & PREVIEW */}
+          {activeTab === "debug" && (
             <div className="space-y-4">
               <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800/80">
                 <p className="text-xs text-zinc-400 leading-relaxed">
-                  Manually inject an active call session to preview how the call box looks on the home page and inspect the active card layout. No transcript is provided for now.
+                  Manually inject an active call session to preview how the call box looks on the home page and inspect the active card layout.
                 </p>
               </div>
 
@@ -297,63 +507,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </form>
             </div>
-          ) : (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">
-                  Gnome Backend REST URL
-                </label>
-                <input
-                  type="text"
-                  value={backendUrl}
-                  onChange={(e) => setBackendUrl(e.target.value)}
-                  placeholder="http://localhost:8000"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">
-                  Gnome Backend WebSocket Base URL
-                </label>
-                <input
-                  type="text"
-                  value={wsUrl}
-                  onChange={(e) => setWsUrl(e.target.value)}
-                  placeholder="ws://localhost:8000"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">
-                  Auto-Terminate Safety Timeout (Seconds)
-                </label>
-                <input
-                  type="number"
-                  value={autoTerminateSeconds}
-                  onChange={(e) => setAutoTerminateSeconds(Number(e.target.value))}
-                  placeholder="1800"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
-                />
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={handleSaveSystemSettings}
-                  disabled={loading}
-                  className="w-full flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50"
-                >
-                  {loading ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Check className="w-3.5 h-3.5" />
-                  )}
-                  Save Server Settings
-                </button>
-              </div>
-            </div>
           )}
         </div>
 
@@ -370,4 +523,3 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     </div>
   );
 };
-

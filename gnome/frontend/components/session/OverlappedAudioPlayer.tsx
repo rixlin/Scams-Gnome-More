@@ -74,7 +74,7 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({ ca
             className={`p-1.5 rounded-lg border transition-colors ${
               isMuted
                 ? "bg-red-950/40 border-red-800/80 text-red-400"
-                : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-white"
+                : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-zinc-100"
             }`}
             title={isMuted ? "Unmute audio wiretap" : "Mute wiretap"}
           >

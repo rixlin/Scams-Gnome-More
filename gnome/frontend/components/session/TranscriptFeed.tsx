@@ -106,7 +106,7 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+              className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
               title="Close drawer"
             >
               <X className="w-4 h-4" />
@@ -134,14 +134,14 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
             // 1. Operator Interjection Turn
             if (turn.speaker === "operator") {
               return (
-                <div key={turn.id} className="flex justify-center my-1 shrink-0">
-                  <div className="w-full max-w-[95%] rounded-xl p-3 bg-indigo-950/30 border border-indigo-700/50 shadow-sm space-y-1.5">
+                <div key={turn.id} className="flex justify-center py-2 shrink-0">
+                  <div className="w-full max-w-[95%] rounded-xl p-3.5 bg-indigo-950/40 border border-indigo-700/50 shadow-sm space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-1.5 text-indigo-400 font-semibold font-mono">
                         <Terminal className="w-3.5 h-3.5" />
                         <span>Operator Feedback Interjection</span>
                       </div>
-                      <div className="flex items-center gap-2 text-[10px] text-indigo-300/70 font-mono">
+                      <div className="flex items-center gap-2 text-[10px] text-zinc-400 font-mono">
                         {turn.in_call_time && (
                           <span className="bg-indigo-900/60 px-1.5 py-0.5 rounded text-indigo-200">
                             {turn.in_call_time}
@@ -150,7 +150,7 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
                         <span>{formatStartTime(turn.timestamp)}</span>
                       </div>
                     </div>
-                    <p className="text-xs text-indigo-100 leading-relaxed font-sans">
+                    <p className="text-xs text-zinc-100 leading-relaxed font-sans">
                       {turn.text}
                     </p>
                   </div>
@@ -171,8 +171,8 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
                 <div
                   className={`max-w-[88%] rounded-2xl p-4 space-y-2 border ${
                     isGnome
-                      ? "bg-emerald-950/20 border-emerald-800/40 text-emerald-100"
-                      : "bg-zinc-950/80 border-zinc-800 text-zinc-200"
+                      ? "bg-emerald-950/30 border-emerald-800/40 text-zinc-100"
+                      : "bg-zinc-950/80 border-zinc-800 text-zinc-100"
                   }`}
                 >
                   {/* Speaker & Timestamps Header */}
@@ -180,13 +180,13 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
                     <div className="flex items-center gap-1.5 font-semibold">
                       {isGnome ? (
                         <>
-                          <Bot className="w-3.5 h-3.5 text-emerald-400" />
-                          <span className="text-emerald-300">{gnomeName}</span>
+                          <Bot className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          <span className="text-emerald-500 font-bold">{gnomeName}</span>
                         </>
                       ) : (
                         <>
-                          <User className="w-3.5 h-3.5 text-amber-400" />
-                          <span className="text-amber-300">Scammer / Caller</span>
+                          <User className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          <span className="text-amber-500 font-bold">Scammer / Caller</span>
                         </>
                       )}
                     </div>
@@ -223,7 +223,7 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
                   )}
 
                   {/* Dialogue Text */}
-                  <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-sans">
+                  <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-sans text-zinc-100">
                     {turn.text}
                   </p>
                 </div>
@@ -234,7 +234,7 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
           {/* In-Flight Gnome Thinking/Crafting/Brewing Indicator */}
           {isCallActive && currentGnomeState && currentGnomeState !== "listening" && (
             <div className="flex flex-col items-end shrink-0">
-              <div className="max-w-[88%] rounded-2xl p-3 bg-zinc-950/90 border border-emerald-500/30 text-emerald-200 space-y-2">
+              <div className="max-w-[88%] rounded-2xl p-3 bg-zinc-950/90 border border-emerald-500/30 text-zinc-100 space-y-2">
                 <div className="flex items-center gap-2 text-xs text-emerald-400 font-mono font-medium">
                   <Bot className="w-3.5 h-3.5 animate-spin" />
                   <span>{gnomeName} in-progress cycle:</span>
@@ -264,7 +264,7 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
               onChange={(e) => setFeedbackInput(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={submitting}
-              placeholder="Send direct prompt injection to Gnome... (e.g. Tell him you have to check your tea kettle)"
+              placeholder="Direct prompt injection to gnome..."
               className="flex-1 bg-zinc-900 border border-zinc-800 focus:border-emerald-500/80 rounded-xl px-3.5 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none transition-colors"
             />
             <button
