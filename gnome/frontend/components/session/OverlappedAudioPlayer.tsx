@@ -363,11 +363,11 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
             </h3>
           </div>
           <div className="flex items-center gap-2 min-h-[28px]">
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 leading-none">
-              Recording Available
-            </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700/60 leading-none">
               {playbackMode === "mono" ? (!unpackedAudio ? "Unpacking..." : "Mono 1-Ch") : "Stereo 2-Ch"}
+            </span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 leading-none">
+              Recording Available
             </span>
           </div>
         </div>
@@ -454,7 +454,7 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
                 {isRecordedPlaying ? (
                   <Pause className="w-4 h-4 fill-white" />
                 ) : (
-                  <Play className="w-4 h-4 fill-white ml-0.5" />
+                  <Play className="w-4 h-4 fill-white" />
                 )}
               </button>
 
@@ -539,7 +539,7 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
         {!isListening ? (
           <div className="flex items-center min-h-[28px]">
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-              Streaming
+              Streaming Available
             </span>
           </div>
         ) : (
