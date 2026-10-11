@@ -251,6 +251,8 @@ class GnomeAgent:
         self._caller_counter = itertools.count(1)
         self._caller_turn_id: str | None = None  # live transcript id of the caller line in progress
         self._connected_before = False  # reconnects carry the transcript so far
+        self._live_task: asyncio.Task | None = None
+        self._reconnect_requested = False
         self._stage_filter = StageDirectionFilter()
 
     # ---- inputs from the Twilio socket ----
@@ -308,17 +310,31 @@ class GnomeAgent:
             return
         attempt = 0
         while not self.session.ended:
+            self._live_task = asyncio.create_task(self._live_session())
             try:
-                await self._live_session()
+                await self._live_task
                 attempt = 0
             except asyncio.CancelledError:
-                raise
+                me = asyncio.current_task()
+                if not self._reconnect_requested or (me is not None and me.cancelling()):
+                    raise  # the agent itself is being shut down
+                # Deliberate reconnect (e.g. mode switch): new system prompt, same call, transcript carried over
+                self._reconnect_requested = False
+                self._end_gnome_turn()  # close out a reply cut off mid-stream
+                log.info("Gemini Live reconnecting for call %s (mode=%s)", self.session.id, self.session.mode)
+                continue
             except Exception as e:
                 log.exception("Gemini Live session failed for call %s", self.session.id)
                 self.session.publish("error", {"source": "llm", "message": str(e)})
                 await self._speak_stall_line()
                 await asyncio.sleep(_RECONNECT_BACKOFF_S[min(attempt, len(_RECONNECT_BACKOFF_S) - 1)])
                 attempt += 1
+
+    def request_reconnect(self) -> None:
+        """Restart the Gemini Live session so a new system prompt (e.g. a mode switch) takes effect."""
+        if self._live_task is not None and not self._live_task.done():
+            self._reconnect_requested = True
+            self._live_task.cancel()
 
     async def close(self) -> None:
         if self._utterance is not None:
@@ -334,6 +350,7 @@ class GnomeAgent:
             default_personality=st["default_personality"],
             personality_override=s.personality_override,
             history=s.transcript if self._connected_before else None,
+            mode=s.mode,
         )
         modality = cfg.gemini_live_modality.upper()
         return types.LiveConnectConfig(
@@ -477,7 +494,7 @@ class GnomeAgent:
     async def _speak_stall_line(self) -> None:
         if self._utterance is not None or self.session.ended:
             return
-        line = random.choice(prompts.STALL_LINES)
+        line = random.choice(prompts.stall_lines(self.session.mode))
         utt = self._new_utterance()
         utt.push(line)
         utt.end()

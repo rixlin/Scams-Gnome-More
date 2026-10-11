@@ -12,6 +12,7 @@ from app.config import get_config
 from app.core import registry, settings_store
 from app.core.session import CallSession
 from app.db import repo
+from app.core.phone import format_phone
 from app.models import Persona
 
 log = logging.getLogger(__name__)
@@ -26,12 +27,13 @@ def start_call(
 ) -> CallSession:
     session = CallSession(
         call_sid=call_sid,
-        caller_number=caller_number,
-        gnome_number=gnome_number,
+        caller_number=format_phone(caller_number),
+        gnome_number=format_phone(gnome_number),
         region=region,
         country=country,
     )
     st = settings_store.get()
+    session.mode = st["gnome_mode"]
     voices = get_config().elevenlabs_voice_ids
     # A voice pinned in settings wins; otherwise each call gets a random voice from .env
     session.voice_id = st["voice_id"] or (random.choice(voices) if voices else None)
@@ -48,7 +50,7 @@ async def _prepare_persona(session: CallSession) -> None:
     if not st["generate_new_gnome_per_call"] and st["fixed_gnome"]:
         session.persona = Persona.model_validate(st["fixed_gnome"])
     else:
-        session.persona = await generate_persona(st["default_personality"])
+        session.persona = await generate_persona(st["default_personality"], session.mode)
     session.persona_ready.set()
     session.publish("call.started", session.started_payload())
 
