@@ -1,13 +1,15 @@
 # 🍄 Scams Gnome More
 
-An AI-powered counter-scam call interception and adversarial testing suite built for HackRU Fall 2026. Forward spam calls to an AI garden gnome that wastes scammers' time, and use the included adversarial attacker agent to benchmark and pressure-test defenses.
+An AI-powered counter-scam call interception and adversarial testing suite to counter modern scammer and telemarketer bots using Google Gemini and ElevenLabs.
+
+Built for Rutgers HackRU Fall 2026.
 
 ---
 
 ## 📁 Repository Structure
 
 ```text
-hackru-f26/
+scams-gnome-more/
 ├── gnome/                      # The Defense Suite
 │   ├── backend/                # FastAPI server (Twilio Media Streams, Gemini, ElevenLabs, Tiger Data)
 │   │   ├── app/                # Application logic, agents, audio pipeline, and WebSockets
