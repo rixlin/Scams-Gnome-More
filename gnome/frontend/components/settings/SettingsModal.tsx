@@ -188,6 +188,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleToggleHideNumbers = (enabled: boolean) => {
+    setHideNumbers(enabled);
     notify.success(
       enabled ? "Numbers Hidden" : "Numbers Visible",
       enabled
