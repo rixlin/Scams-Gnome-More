@@ -11,24 +11,35 @@ import {
 // Public Cloudflare tunnel hostname of the backend (see gnome/backend/run.py)
 export const DEFAULT_BACKEND_URL = "https://api.gnomegrove.tech";
 
-export const getBaseUrl = (): string => {
-  if (typeof window !== "undefined") {
-    return (
-      process.env.NEXT_PUBLIC_BACKEND_URL ||
-      window.localStorage.getItem("gnome_backend_url") ||
-      DEFAULT_BACKEND_URL
-    ).replace(/\/+$/, "");
+// Fired after the URLs in Settings are saved, so open pages reconnect to the new backend right away
+export const BACKEND_URL_CHANGED_EVENT = "gnome_backend_url_changed";
+
+const savedSetting = (key: string): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key)?.trim() || null;
+  } catch {
+    return null;
   }
-  return (process.env.NEXT_PUBLIC_BACKEND_URL || DEFAULT_BACKEND_URL).replace(/\/+$/, "");
 };
 
-// WebSocket base for /ws/live/{channel}. Falls back to the REST URL with http(s) -> ws(s),
-// so an https backend always gets wss (browsers block ws:// from https pages).
-export const getWsBaseUrl = (): string => {
-  const saved = typeof window !== "undefined" ? window.localStorage.getItem("gnome_ws_url") : null;
-  const ws = saved || process.env.NEXT_PUBLIC_WS_URL || getBaseUrl().replace(/^http/, "ws");
-  return ws.replace(/\/+$/, "");
+// http(s)://host -> ws(s)://host, so an https backend always gets wss (browsers block ws:// from https pages)
+export const toWsUrl = (url: string): string => {
+  const trimmed = url.trim().replace(/\/+$/, "");
+  if (/^wss?:\/\//.test(trimmed)) return trimmed;
+  if (/^https?:\/\//.test(trimmed)) return trimmed.replace(/^http/, "ws");
+  return `wss://${trimmed}`;
 };
+
+// What the user saved in Settings wins over the build-time env default
+export const getBaseUrl = (): string =>
+  (savedSetting("gnome_backend_url") || process.env.NEXT_PUBLIC_BACKEND_URL || DEFAULT_BACKEND_URL)
+    .trim()
+    .replace(/\/+$/, "");
+
+// WebSocket base for /ws/live/{channel}; falls back to the REST URL
+export const getWsBaseUrl = (): string =>
+  toWsUrl(savedSetting("gnome_ws_url") || process.env.NEXT_PUBLIC_WS_URL || getBaseUrl());
 
 export async function checkBackendHealth(): Promise<boolean> {
   const baseUrl = getBaseUrl();
@@ -525,10 +536,7 @@ export async function pingRest(targetUrl?: string): Promise<PingResult> {
 }
 
 export async function pingWs(targetWsUrl?: string): Promise<PingResult> {
-  let wsUrl = (targetWsUrl || getBaseUrl().replace(/^http/, "ws")).trim().replace(/\/+$/, "");
-  if (!wsUrl.startsWith("ws://") && !wsUrl.startsWith("wss://")) {
-    wsUrl = `ws://${wsUrl}`;
-  }
+  const wsUrl = toWsUrl(targetWsUrl || getWsBaseUrl());
 
   const pingEndpoint = wsUrl.endsWith("/ws/ping")
     ? wsUrl

@@ -16,7 +16,15 @@ import {
   Volume2,
   Headphones,
 } from "lucide-react";
-import { fetchSettings, updateSettings, pingRest, pingWs, getBaseUrl, getWsBaseUrl } from "../../lib/api";
+import {
+  fetchSettings,
+  updateSettings,
+  pingRest,
+  pingWs,
+  getBaseUrl,
+  getWsBaseUrl,
+  BACKEND_URL_CHANGED_EVENT,
+} from "../../lib/api";
 import { CallSessionSummary, AudioPlaybackMode } from "../../lib/types";
 import { createSampleDebugCallDetail } from "../../lib/debug-call-generator";
 import { useTheme } from "../theme/ThemeProvider";
@@ -189,8 +197,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     fetchSettings()
       .then((settings) => {
         if (!active) return;
-        if (settings.backend_api_url) setBackendUrl(settings.backend_api_url);
-        if (settings.backend_ws_url) setWsUrl(settings.backend_ws_url);
+        // The URL fields always show what THIS browser connects with (its saved settings), never the
+        // backend's copy: that copy can differ per machine, and showing it hid a stale localhost URL.
+        setBackendUrl(getBaseUrl());
+        setWsUrl(getWsBaseUrl());
         if (settings.max_call_seconds) {
           setAutoTerminateSeconds(settings.max_call_seconds);
         } else if (settings.auto_terminate_seconds) {
@@ -228,6 +238,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         window.localStorage.setItem("gnome_backend_url", backendUrl);
         window.localStorage.setItem("gnome_ws_url", wsUrl);
         window.localStorage.setItem("gnome_playback_mode", playbackMode);
+        window.dispatchEvent(new Event(BACKEND_URL_CHANGED_EVENT));
       }
 
       await updateSettings({

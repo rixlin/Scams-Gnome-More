@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { GnomeState, TranscriptTurn } from "../lib/types";
 import { getWsBaseUrl } from "../lib/api";
+import { useBackendUrlVersion } from "./useBackendUrlVersion";
 
 interface UseCallTelemetryOptions {
   callId: string;
@@ -50,6 +51,7 @@ export function useCallTelemetry({
   }, [activeTurnStateHistory]);
 
   const getWsHost = useCallback(() => wsBaseUrl || getWsBaseUrl(), [wsBaseUrl]);
+  const urlVersion = useBackendUrlVersion(); // reconnect when Settings change the backend URL
 
   const normalizeState = useCallback((stateStr: string): GnomeState => {
     if (stateStr === "thinking") return "crafting";
@@ -194,7 +196,7 @@ export function useCallTelemetry({
     return () => {
       ws.close();
     };
-  }, [callId, getWsHost, normalizeState]);
+  }, [callId, getWsHost, normalizeState, urlVersion]);
 
   const transcript = liveTranscript.length > 0 ? liveTranscript : initialTranscript;
 

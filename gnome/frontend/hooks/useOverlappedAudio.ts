@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { getWsBaseUrl } from "../lib/api";
+import { useBackendUrlVersion } from "./useBackendUrlVersion";
 
 interface UseOverlappedAudioOptions {
   callId: string;
@@ -62,6 +63,7 @@ export function useOverlappedAudio({
   }, [gnomeVolume]);
 
   const getWsHost = useCallback(() => wsBaseUrl || getWsBaseUrl(), [wsBaseUrl]);
+  const urlVersion = useBackendUrlVersion(); // reconnect when Settings change the backend URL
 
   // Create (or resume) the Web Audio graph. Browsers only let audio start from a user gesture,
   // so this must be called from a click handler (the "Start Stream" button), never from a socket message.
@@ -263,7 +265,7 @@ export function useOverlappedAudio({
       wsRef.current?.close();
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [callId, autoPlay, getWsHost, playPcm16Chunk]);
+  }, [callId, autoPlay, getWsHost, playPcm16Chunk, urlVersion]);
 
   // Release the audio device when leaving the page
   useEffect(() => {
