@@ -12,8 +12,9 @@ import {
   Bug,
   Palette,
   ChevronDown,
+  Activity,
 } from "lucide-react";
-import { fetchSettings, updateSettings } from "../../lib/api";
+import { fetchSettings, updateSettings, pingRest, pingWs } from "../../lib/api";
 import { CallSessionSummary } from "../../lib/types";
 import { createSampleDebugCallDetail } from "../../lib/debug-call-generator";
 import { useTheme } from "../theme/ThemeProvider";
@@ -95,6 +96,59 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   });
 
   const [autoTerminateSeconds, setAutoTerminateSeconds] = useState(1800);
+  const [aggression, setAggression] = useState(3);
+  const [defaultPersonality, setDefaultPersonality] = useState("");
+  const [voiceId, setVoiceId] = useState("");
+  const [generateNewGnome, setGenerateNewGnome] = useState(true);
+
+  // Ping test states
+  const [restPingState, setRestPingState] = useState<{
+    status: "idle" | "pinging" | "success" | "error";
+    latency?: number;
+    message?: string;
+  }>({ status: "idle" });
+
+  const [wsPingState, setWsPingState] = useState<{
+    status: "idle" | "pinging" | "success" | "error";
+    latency?: number;
+    message?: string;
+  }>({ status: "idle" });
+
+  const handlePingRest = async () => {
+    setRestPingState({ status: "pinging" });
+    const result = await pingRest(backendUrl);
+    if (result.ok) {
+      setRestPingState({
+        status: "success",
+        latency: result.latencyMs,
+        message: result.message,
+      });
+    } else {
+      setRestPingState({
+        status: "error",
+        latency: result.latencyMs,
+        message: result.message || "Failed to reach REST endpoint",
+      });
+    }
+  };
+
+  const handlePingWs = async () => {
+    setWsPingState({ status: "pinging" });
+    const result = await pingWs(wsUrl);
+    if (result.ok) {
+      setWsPingState({
+        status: "success",
+        latency: result.latencyMs,
+        message: result.message,
+      });
+    } else {
+      setWsPingState({
+        status: "error",
+        latency: result.latencyMs,
+        message: result.message || "Failed to reach WebSocket endpoint",
+      });
+    }
+  };
 
   // Debug Call Form state
   const [debugScammerNumber, setDebugScammerNumber] = useState("+1 (555) 392-8172");
@@ -113,8 +167,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         if (!active) return;
         if (settings.backend_api_url) setBackendUrl(settings.backend_api_url);
         if (settings.backend_ws_url) setWsUrl(settings.backend_ws_url);
-        if (settings.auto_terminate_seconds) {
+        if (settings.max_call_seconds) {
+          setAutoTerminateSeconds(settings.max_call_seconds);
+        } else if (settings.auto_terminate_seconds) {
           setAutoTerminateSeconds(settings.auto_terminate_seconds);
+        }
+        if (settings.aggression !== undefined) {
+          setAggression(settings.aggression);
+        }
+        if (settings.default_personality !== undefined) {
+          setDefaultPersonality(settings.default_personality);
+        }
+        if (settings.voice_id !== undefined) {
+          setVoiceId(settings.voice_id || "");
+        }
+        if (settings.generate_new_gnome_per_call !== undefined) {
+          setGenerateNewGnome(settings.generate_new_gnome_per_call);
         }
       })
       .catch(() => {
@@ -141,6 +209,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         backend_api_url: backendUrl,
         backend_ws_url: wsUrl,
         auto_terminate_seconds: autoTerminateSeconds,
+        max_call_seconds: autoTerminateSeconds,
+        aggression,
+        default_personality: defaultPersonality,
+        voice_id: voiceId.trim() || null,
+        generate_new_gnome_per_call: generateNewGnome,
       });
 
       setSavedSuccess(true);
@@ -218,6 +291,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setTimeout(() => {
       setSavedSuccess(false);
       setErrorMessage(null);
+      setRestPingState({ status: "idle" });
+      setWsPingState({ status: "idle" });
       setIsThemeDropdownOpen(false);
       setIsDropdownClosing(false);
       setIsClosing(false);
@@ -236,7 +311,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`relative w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden h-[540px] max-h-[95vh] ${
+        className={`relative w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden h-[620px] max-h-[95vh] ${
           isClosing ? "animate-dialog-zoom-out" : "animate-dialog-zoom"
         }`}
       >
@@ -417,44 +492,241 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* TAB 2: BACKEND */}
           {activeTab === "system" && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">
-                  Gnome Backend REST URL
-                </label>
-                <input
-                  type="text"
-                  value={backendUrl}
-                  onChange={(e) => setBackendUrl(e.target.value)}
-                  placeholder="http://localhost:8000"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
-                />
+            <div className="space-y-5">
+              {/* Connection Section */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                    Connection Settings
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handlePingRest();
+                      handlePingWs();
+                    }}
+                    disabled={restPingState.status === "pinging" || wsPingState.status === "pinging"}
+                    className="text-[11px] font-medium text-emerald-400 hover:text-emerald-300 disabled:opacity-50 flex items-center gap-1 transition-colors hover:scale-105 active:scale-95 disabled:hover:scale-100"
+                  >
+                    <Activity className="w-3 h-3" />
+                    Test Backend
+                  </button>
+                </div>
+
+                {/* REST URL + Ping */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-zinc-300">
+                      Gnome Backend REST URL
+                    </label>
+                    {restPingState.status === "success" && (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                        <Check className="w-2.5 h-2.5" />
+                        {restPingState.latency}ms
+                      </span>
+                    )}
+                    {restPingState.status === "error" && (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 flex items-center gap-1">
+                        <AlertCircle className="w-2.5 h-2.5" />
+                        Offline
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={backendUrl}
+                      onChange={(e) => {
+                        setBackendUrl(e.target.value);
+                        setRestPingState({ status: "idle" });
+                      }}
+                      placeholder="http://localhost:8000"
+                      className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
+                    />
+                    <button
+                      type="button"
+                      onClick={handlePingRest}
+                      disabled={restPingState.status === "pinging"}
+                      className="px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/60 transition-all hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                    >
+                      {restPingState.status === "pinging" ? (
+                        <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
+                      ) : (
+                        <Activity className="w-3 h-3 text-emerald-400" />
+                      )}
+                      Test
+                    </button>
+                  </div>
+                  {restPingState.message && (
+                    <p
+                      className={`text-[11px] mt-1 ${
+                        restPingState.status === "error" ? "text-red-400" : "text-emerald-400/80"
+                      }`}
+                    >
+                      {restPingState.message}
+                    </p>
+                  )}
+                </div>
+
+                {/* WebSocket URL + Ping */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-zinc-300">
+                      Gnome Backend WebSocket Base URL
+                    </label>
+                    {wsPingState.status === "success" && (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                        <Check className="w-2.5 h-2.5" />
+                        {wsPingState.latency}ms
+                      </span>
+                    )}
+                    {wsPingState.status === "error" && (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 flex items-center gap-1">
+                        <AlertCircle className="w-2.5 h-2.5" />
+                        Offline
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={wsUrl}
+                      onChange={(e) => {
+                        setWsUrl(e.target.value);
+                        setWsPingState({ status: "idle" });
+                      }}
+                      placeholder="ws://localhost:8000"
+                      className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
+                    />
+                    <button
+                      type="button"
+                      onClick={handlePingWs}
+                      disabled={wsPingState.status === "pinging"}
+                      className="px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/60 transition-all hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                    >
+                      {wsPingState.status === "pinging" ? (
+                        <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
+                      ) : (
+                        <Activity className="w-3 h-3 text-emerald-400" />
+                      )}
+                      Test
+                    </button>
+                  </div>
+                  {wsPingState.message && (
+                    <p
+                      className={`text-[11px] mt-1 ${
+                        wsPingState.status === "error" ? "text-red-400" : "text-emerald-400/80"
+                      }`}
+                    >
+                      {wsPingState.message}
+                    </p>
+                  )}
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">
-                  Gnome Backend WebSocket Base URL
-                </label>
-                <input
-                  type="text"
-                  value={wsUrl}
-                  onChange={(e) => setWsUrl(e.target.value)}
-                  placeholder="ws://localhost:8000"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
-                />
-              </div>
+              {/* AI & Engine Parameters */}
+              <div className="space-y-3 pt-2 border-t border-zinc-800/80">
+                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400">
+                  Gnome Engine Parameters
+                </h4>
 
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">
-                  Auto-Terminate Safety Timeout (Seconds)
-                </label>
-                <input
-                  type="number"
-                  value={autoTerminateSeconds}
-                  onChange={(e) => setAutoTerminateSeconds(Number(e.target.value))}
-                  placeholder="1800"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
-                />
+                {/* Aggression Slider */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-zinc-300">
+                      Aggression Level
+                    </label>
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      Level {aggression}: {
+                        aggression === 1
+                          ? "Gullible & Slow"
+                          : aggression === 2
+                          ? "Cautious"
+                          : aggression === 3
+                          ? "Playful Troll"
+                          : aggression === 4
+                          ? "Distracting & Absurd"
+                          : "Maximum Chaos"
+                      }
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="5"
+                    step="1"
+                    value={aggression}
+                    onChange={(e) => setAggression(Number(e.target.value))}
+                    className="w-full accent-emerald-500 h-1.5 bg-zinc-800 rounded-lg cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[10px] text-zinc-500 mt-1">
+                    <span>1 (Mild)</span>
+                    <span>3 (Balanced)</span>
+                    <span>5 (Total Chaos)</span>
+                  </div>
+                </div>
+
+                {/* Dynamic Gnome Generation Toggle */}
+                <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/80">
+                  <div>
+                    <span className="block text-xs font-medium text-zinc-200">
+                      Dynamic Gnome Generation
+                    </span>
+                    <span className="block text-[11px] text-zinc-400">
+                      Synthesizes a distinct backstory and quirk profile per inbound call
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={generateNewGnome}
+                    onChange={(e) => setGenerateNewGnome(e.target.checked)}
+                    className="w-4 h-4 rounded accent-emerald-500 cursor-pointer"
+                  />
+                </div>
+
+                {/* Default Personality Archetype */}
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">
+                    Default Personality Archetype / Prompt
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={defaultPersonality}
+                    onChange={(e) => setDefaultPersonality(e.target.value)}
+                    placeholder="e.g. A retired eccentric watchmaker who believes callers are lawn maintenance elves."
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500/80 resize-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1">
+                      ElevenLabs Voice ID
+                    </label>
+                    <input
+                      type="text"
+                      value={voiceId}
+                      onChange={(e) => setVoiceId(e.target.value)}
+                      placeholder="e.g. pFZP5JQG7iQjIQuC4Bku"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1">
+                      Max Call Duration (Seconds)
+                    </label>
+                    <input
+                      type="number"
+                      min={30}
+                      max={7200}
+                      value={autoTerminateSeconds}
+                      onChange={(e) => setAutoTerminateSeconds(Number(e.target.value))}
+                      placeholder="1800"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="pt-2">

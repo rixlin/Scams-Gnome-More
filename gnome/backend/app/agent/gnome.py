@@ -129,6 +129,7 @@ class _Utterance:
             if not sent_any:
                 held.append(ulaw)
                 if sum(map(len, held)) < _PREBUFFER_S * SAMPLE_RATE:
+                    session.set_state("brewing")
                     continue
                 await self._start_speaking()
                 sent_any = True
@@ -153,7 +154,7 @@ class _Utterance:
 
     async def _start_speaking(self) -> None:
         await self.agent.wait_for_caller_silence()
-        self.agent.session.set_state("speaking")
+        self.agent.session.set_state("responding")
         self.agent.session.set_gnome_speaking(True)
 
     async def _send_audio(self, ulaw: bytes) -> None:
@@ -344,7 +345,7 @@ class GnomeAgent:
     def _on_caller_text(self, text: str) -> None:
         self._caller_buf += text
         if not self.session.gnome_speaking:
-            self.session.set_state("listening")
+            self.session.set_state("analyzing")
         self.session.publish("transcript", {"speaker": "caller", "text": self._caller_buf.strip(), "final": False})
 
     def _flush_caller(self) -> None:
@@ -358,7 +359,7 @@ class GnomeAgent:
             return
         if self._utterance is None:
             self._flush_caller()
-            self.session.set_state("thinking")
+            self.session.set_state("crafting")
             self._utterance = _Utterance(self, next(self._utt_counter))
         self._utterance.push(text)
         self.session.publish("transcript", {"speaker": "gnome", "text": self._utterance.text, "final": False})

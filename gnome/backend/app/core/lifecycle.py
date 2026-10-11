@@ -17,8 +17,20 @@ from app.models import Persona
 log = logging.getLogger(__name__)
 
 
-def start_call(call_sid: str | None, caller_number: str | None) -> CallSession:
-    session = CallSession(call_sid=call_sid, caller_number=caller_number)
+def start_call(
+    call_sid: str | None,
+    caller_number: str | None,
+    gnome_number: str | None = None,
+    region: str | None = None,
+    country: str | None = None,
+) -> CallSession:
+    session = CallSession(
+        call_sid=call_sid,
+        caller_number=caller_number,
+        gnome_number=gnome_number,
+        region=region,
+        country=country,
+    )
     st = settings_store.get()
     voices = get_config().elevenlabs_voice_ids
     # A voice pinned in settings wins; otherwise each call gets a random voice from .env

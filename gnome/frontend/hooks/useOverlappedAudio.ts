@@ -33,8 +33,7 @@ export function useOverlappedAudio({
   const userAnalyserRef = useRef<AnalyserNode | null>(null);
   const gnomeAnalyserRef = useRef<AnalyserNode | null>(null);
 
-  const userWsRef = useRef<WebSocket | null>(null);
-  const gnomeWsRef = useRef<WebSocket | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
   const getWsHost = useCallback(() => {
@@ -51,7 +50,10 @@ export function useOverlappedAudio({
   // Initialize Web Audio Context and separate signal paths
   const ensureAudioContext = useCallback(() => {
     if (!audioCtxRef.current) {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext;
       if (!AudioCtx) return null;
       const ctx = new AudioCtx();
 
@@ -86,43 +88,71 @@ export function useOverlappedAudio({
     return audioCtxRef.current;
   }, [isMuted, userVolume, gnomeVolume]);
 
-  // Play audio buffer into a specific channel
-  const playAudioChunk = useCallback(async (channel: "user" | "gnome", arrayBuffer: ArrayBuffer) => {
-    const ctx = ensureAudioContext();
-    if (!ctx) return;
+  // Play raw 16-bit PCM mono audio chunk (8kHz) into a specific channel
+  const playPcm16Chunk = useCallback(
+    (channel: "user" | "gnome", pcmBase64: string, sampleRate = 8000) => {
+      const ctx = ensureAudioContext();
+      if (!ctx) return;
 
-    try {
-      // Decode audio chunk (PCM, MP3, WAV, etc.)
-      const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
-      const source = ctx.createBufferSource();
-      source.buffer = audioBuffer;
+      try {
+        const binary = atob(pcmBase64);
+        const len = binary.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
 
-      const targetAnalyser = channel === "user" ? userAnalyserRef.current : gnomeAnalyserRef.current;
-      if (targetAnalyser) {
-        source.connect(targetAnalyser);
-      } else {
-        source.connect(ctx.destination);
+        // 16-bit signed integer samples
+        const sampleCount = Math.floor(bytes.byteLength / 2);
+        if (sampleCount === 0) return;
+
+        const int16 = new Int16Array(bytes.buffer, bytes.byteOffset, sampleCount);
+        const float32 = new Float32Array(sampleCount);
+        for (let i = 0; i < sampleCount; i++) {
+          float32[i] = int16[i] / 32768.0;
+        }
+
+        const buffer = ctx.createBuffer(1, float32.length, sampleRate);
+        buffer.getChannelData(0).set(float32);
+
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+
+        const targetAnalyser =
+          channel === "user" ? userAnalyserRef.current : gnomeAnalyserRef.current;
+        if (targetAnalyser) {
+          source.connect(targetAnalyser);
+        } else {
+          source.connect(ctx.destination);
+        }
+        source.start();
+      } catch {
+        // Ignored
       }
-      source.start();
-    } catch {
-      // Fallback: If decodeAudioData fails (e.g. raw PCM without headers), ignore or handle gracefully
-    }
-  }, [ensureAudioContext]);
+    },
+    [ensureAudioContext]
+  );
 
   // Volume & Mute synchronizers
-  const setUserVolume = useCallback((val: number) => {
-    setUserVolumeState(val);
-    if (userGainRef.current && !isMuted) {
-      userGainRef.current.gain.value = val;
-    }
-  }, [isMuted]);
+  const setUserVolume = useCallback(
+    (val: number) => {
+      setUserVolumeState(val);
+      if (userGainRef.current && !isMuted) {
+        userGainRef.current.gain.value = val;
+      }
+    },
+    [isMuted]
+  );
 
-  const setGnomeVolume = useCallback((val: number) => {
-    setGnomeVolumeState(val);
-    if (gnomeGainRef.current && !isMuted) {
-      gnomeGainRef.current.gain.value = val;
-    }
-  }, [isMuted]);
+  const setGnomeVolume = useCallback(
+    (val: number) => {
+      setGnomeVolumeState(val);
+      if (gnomeGainRef.current && !isMuted) {
+        gnomeGainRef.current.gain.value = val;
+      }
+    },
+    [isMuted]
+  );
 
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => {
@@ -137,68 +167,43 @@ export function useOverlappedAudio({
     });
   }, [userVolume, gnomeVolume]);
 
-  // Setup WebSockets for both independent streams
+  // Setup WebSocket connection to /ws/live/{callId}
   useEffect(() => {
     if (!callId || !autoPlay) return;
 
     const baseHost = getWsHost();
-    const userWsUrl = `${baseHost}/ws/calls/${callId}/audio/user`;
-    const gnomeWsUrl = `${baseHost}/ws/calls/${callId}/audio/gnome`;
+    const liveWsUrl = `${baseHost}/ws/live/${callId}`;
 
-    // Connect User audio WS
-    const userWs = new WebSocket(userWsUrl);
-    userWs.binaryType = "arraybuffer";
-    userWsRef.current = userWs;
+    const ws = new WebSocket(liveWsUrl);
+    wsRef.current = ws;
 
-    userWs.onopen = () => setUserWsStatus("open");
-    userWs.onclose = () => setUserWsStatus("closed");
-    userWs.onerror = () => setUserWsStatus("error");
-    userWs.onmessage = async (e) => {
-      if (e.data instanceof ArrayBuffer) {
-        playAudioChunk("user", e.data);
-      } else if (typeof e.data === "string") {
-        try {
-          const parsed = JSON.parse(e.data);
-          const b64 = parsed.audio || parsed.payload_base64;
-          if (b64) {
-            const binary = atob(b64);
-            const bytes = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i++) {
-              bytes[i] = binary.charCodeAt(i);
-            }
-            playAudioChunk("user", bytes.buffer);
-          }
-        } catch {
-          // Non-JSON string or ping
-        }
-      }
+    ws.onopen = () => {
+      setUserWsStatus("open");
+      setGnomeWsStatus("open");
+    };
+    ws.onclose = () => {
+      setUserWsStatus("closed");
+      setGnomeWsStatus("closed");
+    };
+    ws.onerror = () => {
+      setUserWsStatus("error");
+      setGnomeWsStatus("error");
     };
 
-    // Connect Gnome audio WS
-    const gnomeWs = new WebSocket(gnomeWsUrl);
-    gnomeWs.binaryType = "arraybuffer";
-    gnomeWsRef.current = gnomeWs;
-
-    gnomeWs.onopen = () => setGnomeWsStatus("open");
-    gnomeWs.onclose = () => setGnomeWsStatus("closed");
-    gnomeWs.onerror = () => setGnomeWsStatus("error");
-    gnomeWs.onmessage = async (e) => {
-      if (e.data instanceof ArrayBuffer) {
-        playAudioChunk("gnome", e.data);
-      } else if (typeof e.data === "string") {
+    ws.onmessage = (e) => {
+      if (typeof e.data === "string") {
         try {
-          const parsed = JSON.parse(e.data);
-          const b64 = parsed.audio || parsed.payload_base64;
-          if (b64) {
-            const binary = atob(b64);
-            const bytes = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i++) {
-              bytes[i] = binary.charCodeAt(i);
-            }
-            playAudioChunk("gnome", bytes.buffer);
+          const payload = JSON.parse(e.data);
+          const type = payload.type;
+          const data = payload.data || payload;
+
+          if (type === "audio.caller" && data.pcm16) {
+            playPcm16Chunk("user", data.pcm16, data.sample_rate || 8000);
+          } else if (type === "audio.gnome" && data.pcm16) {
+            playPcm16Chunk("gnome", data.pcm16, data.sample_rate || 8000);
           }
         } catch {
-          // Non-JSON string or ping
+          // Ignored
         }
       }
     };
@@ -227,11 +232,10 @@ export function useOverlappedAudio({
     animFrameRef.current = requestAnimationFrame(updateLevels);
 
     return () => {
-      if (userWs) userWs.close();
-      if (gnomeWs) gnomeWs.close();
+      ws.close();
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [callId, autoPlay, getWsHost, playAudioChunk]);
+  }, [callId, autoPlay, getWsHost, playPcm16Chunk]);
 
   return {
     isMuted,

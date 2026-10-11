@@ -9,9 +9,18 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-Speaker = Literal["caller", "gnome"]
-ActiveSpeaker = Literal["caller", "gnome", "none"]
-GnomeState = Literal["idle", "listening", "thinking", "speaking"]
+Speaker = Literal["caller", "gnome", "user", "operator"]
+ActiveSpeaker = Literal["caller", "gnome", "user", "none"]
+GnomeState = Literal[
+    "listening",
+    "analyzing",
+    "crafting",
+    "brewing",
+    "responding",
+    "idle",
+    "thinking",
+    "speaking",
+]
 
 
 class Persona(BaseModel):
@@ -49,6 +58,13 @@ class PersonalityIn(BaseModel):
     voice_id: str | None = None
 
 
+class GnomeUpdateIn(BaseModel):
+    personality: str | None = None
+    feedback: str | None = None
+    instruction: str | None = None
+    voice_id: str | None = None
+
+
 # ---- REST responses ----
 
 
@@ -60,26 +76,45 @@ class GnomeOut(BaseModel):
 
 class CallSummary(BaseModel):
     id: UUID
-    twilio_call_sid: str | None
-    caller_number: str | None
-    gnome_name: str | None
+    twilio_call_sid: str | None = None
+    caller_number: str | None = None
+    scammer_number: str | None = None
+    region: str | None = None
+    country: str | None = None
+    gnome_number: str | None = None
+    gnome_name: str | None = None
     started_at: datetime
-    ended_at: datetime | None
-    duration_s: int | None
-    end_reason: str | None
+    ended_at: datetime | None = None
+    duration_s: int | None = None
+    duration_seconds: int | None = None
+    status: Literal["active", "ended"] = "ended"
+    end_reason: str | None = None
+    recording_url: str | None = None
+    recording_status: Literal["available", "unavailable"] = "unavailable"
 
 
 class CallDetail(CallSummary):
-    gnome: GnomeOut | None
-    utterances: list[Utterance]
-    has_audio: bool
+    gnome: GnomeOut | None = None
+    utterances: list[Utterance] = Field(default_factory=list)
+    transcript: list[Utterance] = Field(default_factory=list)
+    has_audio: bool = False
 
 
 class ActiveCall(BaseModel):
+    id: UUID
     call_id: UUID
-    caller_number: str | None
-    gnome: Persona | None
-    elapsed_s: float
+    caller_number: str | None = None
+    scammer_number: str | None = None
+    region: str | None = None
+    country: str | None = None
+    gnome_number: str | None = None
+    gnome_name: str | None = None
+    gnome: Persona | None = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    elapsed_s: float = 0.0
+    duration_seconds: int = 0
+    status: Literal["active", "ended"] = "active"
 
 
 # ---- WS events (server -> frontend) ----

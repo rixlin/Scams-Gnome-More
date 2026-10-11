@@ -18,6 +18,9 @@ const STATE_ICONS: Record<GnomeState, React.ComponentType<{ className?: string }
   crafting: Sparkles,
   brewing: Flame,
   responding: MessageSquare,
+  idle: Ear,
+  thinking: Sparkles,
+  speaking: MessageSquare,
 };
 
 const STATE_LABELS: Record<GnomeState, string> = {
@@ -26,6 +29,9 @@ const STATE_LABELS: Record<GnomeState, string> = {
   crafting: "crafting",
   brewing: "brewing",
   responding: "responding",
+  idle: "listening",
+  thinking: "crafting",
+  speaking: "responding",
 };
 
 export const StateStepsLine: React.FC<StateStepsLineProps> = ({

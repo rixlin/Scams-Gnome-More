@@ -101,9 +101,6 @@ export default function HomePage() {
   useEffect(() => {
     let active = true;
 
-    // Immediately sync debug and terminated calls
-    syncDebugCalls();
-
     async function initialFetch() {
       try {
         const data = await fetchCallSessions();
@@ -148,10 +145,13 @@ export default function HomePage() {
   }, [syncDebugCalls]);
 
   // Merge debug calls and backend calls, avoiding duplicates
-  const allCalls: CallSessionSummary[] = [
-    ...debugCalls,
-    ...backendCalls.filter((c) => !debugCalls.some((d) => d.id === c.id)),
-  ];
+  const allCalls: CallSessionSummary[] = useMemo(
+    () => [
+      ...debugCalls,
+      ...backendCalls.filter((c) => !debugCalls.some((d) => d.id === c.id)),
+    ],
+    [debugCalls, backendCalls]
+  );
 
   // Filter state
   const [searchNumber, setSearchNumber] = useState("");

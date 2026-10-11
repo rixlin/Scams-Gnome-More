@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { GnomeState, TelemetryEvent, TranscriptTurn } from "../lib/types";
+import { GnomeState, TranscriptTurn } from "../lib/types";
 
 interface UseCallTelemetryOptions {
   callId: string;
@@ -36,11 +36,26 @@ export function useCallTelemetry({
     return "ws://localhost:8000";
   }, [wsBaseUrl]);
 
+  const normalizeState = useCallback((stateStr: string): GnomeState => {
+    if (stateStr === "thinking") return "crafting";
+    if (stateStr === "speaking") return "responding";
+    if (stateStr === "idle") return "listening";
+    if (
+      stateStr === "analyzing" ||
+      stateStr === "crafting" ||
+      stateStr === "brewing" ||
+      stateStr === "responding"
+    ) {
+      return stateStr as GnomeState;
+    }
+    return "listening";
+  }, []);
+
   useEffect(() => {
     if (!callId) return;
 
     const baseHost = getWsHost();
-    const telemUrl = `${baseHost}/ws/calls/${callId}/telemetry`;
+    const telemUrl = `${baseHost}/ws/live/${callId}`;
 
     const ws = new WebSocket(telemUrl);
     wsRef.current = ws;
@@ -51,72 +66,100 @@ export function useCallTelemetry({
 
     ws.onmessage = (event) => {
       try {
-        const data: TelemetryEvent = JSON.parse(event.data);
+        const payload = JSON.parse(event.data);
+        const type = payload.type;
+        const data = payload.data || payload;
 
-        switch (data.type) {
-          case "active_speaker":
-            setActiveSpeaker(data.speaker);
-            break;
-
-          case "gnome_state_step":
-            setCurrentGnomeState(data.state);
-            setActiveTurnStateHistory((prev) => {
-              if (prev.includes(data.state)) return prev;
-              return [...prev, data.state];
-            });
-            break;
-
-          case "transcript_chunk": {
-            setLiveTranscript((prev) => {
-              const currentList = prev.length > 0 ? prev : initialTranscript;
-              const lastTurn = currentList[currentList.length - 1];
-              const turnId = data.turn_id || `turn-${Date.now()}`;
-
-              // If same speaker and last turn wasn't final, update it
-              if (lastTurn && lastTurn.speaker === data.speaker && !data.is_final) {
-                const updated: TranscriptTurn = {
-                  ...lastTurn,
-                  text: data.text,
-                };
-                return [...currentList.slice(0, -1), updated];
-              }
-
-              // Finalized chunk or new speaker turn
-              const newTurn: TranscriptTurn = {
-                id: turnId,
-                speaker: data.speaker,
-                text: data.text,
-                timestamp: data.timestamp || new Date().toISOString(),
-                state_history:
-                  data.speaker === "gnome" ? [...activeTurnStateHistory] : undefined,
-              };
-
-              // If gnome completed turn, reset activeTurnStateHistory for next cycle
-              if (data.speaker === "gnome" && data.is_final) {
-                setActiveTurnStateHistory(["listening"]);
-                setCurrentGnomeState("listening");
-              }
-
-              return [...currentList, newTurn];
-            });
-            break;
+        // 1. Unified Telemetry Event (or flat legacy event)
+        if (type === "telemetry" || type === "active_speaker" || type === "gnome_state_step") {
+          if (data.active_speaker !== undefined || data.speaker !== undefined) {
+            const rawSpk = data.active_speaker || data.speaker;
+            const mappedSpk = rawSpk === "caller" ? "user" : rawSpk;
+            setActiveSpeaker(mappedSpk as "user" | "gnome" | "none");
           }
 
-          case "call_terminated":
-            setIsTerminated(true);
-            setActiveSpeaker("none");
-            if (onCallEnded) onCallEnded();
-            break;
+          if (data.gnome_state !== undefined || data.state !== undefined) {
+            const rawSt = data.gnome_state || data.state;
+            const mappedSt = normalizeState(rawSt);
+            setCurrentGnomeState(mappedSt);
+            setActiveTurnStateHistory((prev) => {
+              if (prev.includes(mappedSt)) return prev;
+              return [...prev, mappedSt];
+            });
+          }
+        }
+
+        // 2. Unified Transcript Event (or flat legacy event)
+        else if (type === "transcript" || type === "transcript_chunk") {
+          const rawSpk = data.speaker || "user";
+          const speaker: "user" | "caller" | "gnome" | "operator" =
+            rawSpk === "caller" ? "user" : rawSpk;
+          const isFinal = data.final ?? data.is_final ?? true;
+          const text = data.text || "";
+          const turnId = data.turn_id || `turn-${data.seq ?? Date.now()}`;
+
+          setLiveTranscript((prev) => {
+            const currentList = prev.length > 0 ? prev : initialTranscript;
+            const lastTurn = currentList[currentList.length - 1];
+
+            // If same speaker and last turn wasn't final, update it
+            if (lastTurn && lastTurn.speaker === speaker && !isFinal) {
+              const updated: TranscriptTurn = {
+                ...lastTurn,
+                text,
+              };
+              return [...currentList.slice(0, -1), updated];
+            }
+
+            // Finalized chunk or new speaker turn
+            const newTurn: TranscriptTurn = {
+              id: turnId,
+              speaker,
+              text,
+              timestamp: payload.ts || data.timestamp || new Date().toISOString(),
+              state_history:
+                speaker === "gnome" ? [...activeTurnStateHistory] : undefined,
+              seq: data.seq,
+              final: isFinal,
+            };
+
+            // If gnome completed turn, reset activeTurnStateHistory for next cycle
+            if (speaker === "gnome" && isFinal) {
+              setActiveTurnStateHistory(["listening"]);
+              setCurrentGnomeState("listening");
+            }
+
+            return [...currentList, newTurn];
+          });
+        }
+
+        // 3. Operator Feedback Live Event
+        else if (type === "gnome.updated" && data.kind === "feedback") {
+          const opTurn: TranscriptTurn = {
+            id: `turn-operator-${Date.now()}`,
+            speaker: "operator",
+            text: data.text,
+            timestamp: payload.ts || new Date().toISOString(),
+            in_call_time: "+live",
+          };
+          setLiveTranscript((prev) => [...prev, opTurn]);
+        }
+
+        // 4. Call Terminated / Ended
+        else if (type === "call.ended" || type === "call_terminated") {
+          setIsTerminated(true);
+          setActiveSpeaker("none");
+          if (onCallEnded) onCallEnded();
         }
       } catch {
-        // Ignored or raw text message
+        // Ignored
       }
     };
 
     return () => {
       ws.close();
     };
-  }, [callId, getWsHost, onCallEnded, activeTurnStateHistory, initialTranscript]);
+  }, [callId, getWsHost, onCallEnded, activeTurnStateHistory, initialTranscript, normalizeState]);
 
   const transcript = liveTranscript.length > 0 ? liveTranscript : initialTranscript;
 

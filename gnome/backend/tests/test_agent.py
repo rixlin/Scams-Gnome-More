@@ -83,7 +83,7 @@ def test_turn_produces_transcript_audio_and_mark(monkeypatch, modality):
     ]
     assert [m["event"] for m in sent] == ["media", "mark"]
     assert all(m["streamSid"] == "MZ1" for m in sent)
-    assert session.gnome_speaking and session.gnome_state == "speaking"
+    assert session.gnome_speaking and session.gnome_state == "responding"
 
     agent.on_mark(sent[-1]["mark"]["name"])
     assert not session.gnome_speaking and session.gnome_state == "listening"

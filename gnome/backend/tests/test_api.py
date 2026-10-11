@@ -18,6 +18,26 @@ def _start_call(client) -> str:
 
 def test_health(client):
     assert client.get("/health").json()["ok"] is True
+    assert client.get("/api/health").json()["ok"] is True
+
+
+def test_ping_endpoints(client):
+    r = client.get("/api/ping")
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert r.json()["pong"] is True
+
+    with client.websocket_connect("/ws/ping") as ws:
+        msg = json.loads(ws.receive_text())
+        assert msg["type"] == "pong"
+        ws.send_text("ping")
+        msg2 = json.loads(ws.receive_text())
+        assert msg2["type"] == "pong"
+        assert msg2["received"] == "ping"
+
+    with client.websocket_connect("/ws/live/ping") as ws_live:
+        msg = json.loads(ws_live.receive_text())
+        assert msg["type"] == "pong"
 
 
 def test_settings_update(client):
@@ -37,6 +57,34 @@ def test_live_edits_need_active_call(client):
         "/api/calls/00000000-0000-0000-0000-000000000000/gnome/feedback", json={"text": "hi"}
     )
     assert r.status_code == 404
+    r2 = client.post(
+        "/api/calls/00000000-0000-0000-0000-000000000000/gnome/update", json={"feedback": "hi"}
+    )
+    assert r2.status_code == 404
+
+
+def test_active_call_detail_and_update(client):
+    call_id = _start_call(client)
+    # Active call detail returns 200 from memory even without DB
+    r = client.get(f"/api/calls/{call_id}")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == call_id
+    assert data["status"] == "active"
+    assert data["scammer_number"] == "+15550001111"
+
+    # Combined update works
+    up = client.post(f"/api/calls/{call_id}/gnome/update", json={
+        "feedback": "ask about the mushrooms",
+        "personality": "grouchy dwarf",
+    })
+    assert up.status_code == 200
+
+    # Delete active call is forbidden
+    del_res = client.delete(f"/api/calls/{call_id}")
+    assert del_res.status_code == 400
+
+    client.post(f"/api/calls/{call_id}/terminate")
 
 
 def test_full_call_flow(client):
