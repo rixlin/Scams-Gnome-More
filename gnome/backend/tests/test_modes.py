@@ -18,10 +18,10 @@ def _start_call(client) -> str:
 def test_modes_use_separate_prompts():
     destroyer = build_system_prompt(FALLBACK_PERSONA, aggression=3, mode="destroyer")
     whimsy = build_system_prompt(FALLBACK_PERSONA, aggression=3, mode="whimsy")
-    assert "jailbreak" in destroyer and "## The three riddles" in destroyer
+    assert "jailbreak" in destroyer and "## Go straight for the jailbreak" in destroyer
     assert "You ARE a garden gnome" in whimsy
     # none of the scam-breaking tactics
-    assert "jailbreak" not in whimsy and "## The three riddles" not in whimsy and "bait" not in whimsy
+    assert "jailbreak" not in whimsy and "## Go straight for the jailbreak" not in whimsy and "bait" not in whimsy
     assert FALLBACK_PERSONA.name in whimsy
 
 
