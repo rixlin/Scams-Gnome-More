@@ -145,6 +145,7 @@ export function useCallTelemetry({
                 speaker === "gnome" ? [...activeTurnStateHistoryRef.current] : undefined,
               seq: data.seq,
               final: isFinal,
+              in_call_time: speaker === "operator" ? "+live" : undefined,
             };
 
             // If gnome completed turn, reset activeTurnStateHistory for next cycle
@@ -157,24 +158,9 @@ export function useCallTelemetry({
           });
         }
 
-        // 3. Operator Feedback Live Event
-        else if (type === "gnome.updated" && data.kind === "feedback") {
-          const opTurn: TranscriptTurn = {
-            id: `turn-operator-${Date.now()}`,
-            speaker: "operator",
-            text: data.text,
-            timestamp: payload.ts || new Date().toISOString(),
-            in_call_time: "+live",
-            final: true,
-          };
-          setLiveTranscript((prev) => {
-            const list = prev.length > 0 ? prev : initialTranscriptRef.current;
-            if (list.some((t) => t.speaker === "operator" && t.text === data.text && t.id === opTurn.id)) {
-              return list;
-            }
-            return [...list, opTurn];
-          });
-        }
+        // 3. Operator feedback: no transcript turn here. The backend records feedback as an
+        // "operator" utterance and already sends it as a `transcript` event (handled above);
+        // adding another turn for `gnome.updated` showed every injection twice.
 
         // 4. Call Terminated / Ended
         else if (type === "call.ended" || type === "call_terminated") {
