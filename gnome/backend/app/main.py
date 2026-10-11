@@ -52,6 +52,7 @@ app.add_middleware(
 )
 app.include_router(settings.router)
 app.include_router(gnome.router)
+app.include_router(gnome.mode_router)
 app.include_router(calls.router)
 app.include_router(twilio_hooks.router)
 app.include_router(twilio_stream.router)

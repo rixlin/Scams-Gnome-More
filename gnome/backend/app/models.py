@@ -10,6 +10,8 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 Speaker = Literal["caller", "gnome", "user", "operator"]
+# destroyer: jailbreak and break the scam caller. whimsy: the gnome sincerely believes it is a whimsical gnome.
+GnomeMode = Literal["destroyer", "whimsy"]
 ActiveSpeaker = Literal["caller", "gnome", "user", "none"]
 GnomeState = Literal[
     "listening",
@@ -48,6 +50,13 @@ class SettingsUpdate(BaseModel):
     generate_new_gnome_per_call: bool | None = None
     fixed_gnome: Persona | None = None
     aggression: int | None = Field(default=None, ge=1, le=5)
+    gnome_mode: GnomeMode | None = None
+
+
+class GnomeModeIn(BaseModel):
+    mode: GnomeMode
+    # Global endpoint only: also switch calls that are already in progress
+    apply_to_active: bool = True
 
 
 class FeedbackIn(BaseModel):

@@ -14,6 +14,7 @@ from app.core.hub import hub
 from app.models import (
     ActiveSpeaker,
     CallDetail,
+    GnomeMode,
     GnomeOut,
     GnomeState,
     Persona,
@@ -42,6 +43,7 @@ class CallSession:
     persona_ready: asyncio.Event = field(default_factory=asyncio.Event)
     personality_override: str | None = None
     voice_id: str | None = None
+    mode: GnomeMode = "destroyer"  # which system prompt the gnome runs on (switchable mid-call)
 
     # Live edits waiting to be handed to the agent
     operator_notes: asyncio.Queue[str] = field(default_factory=asyncio.Queue)
@@ -118,6 +120,7 @@ class CallSession:
             "gnome": self.persona.model_dump() if self.persona else None,
             "personality_override": self.personality_override,
             "voice_id": self.voice_id,
+            "gnome_mode": self.mode,
             "status": "active",
         }
 
@@ -133,6 +136,7 @@ class CallSession:
                     "quirks": self.persona.speaking_quirks,
                     "override": self.personality_override,
                     "voice_id": self.voice_id,
+                    "mode": self.mode,
                 },
             )
         return CallDetail(

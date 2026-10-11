@@ -9,6 +9,7 @@ from uuid import UUID
 import asyncpg
 
 from app.config import get_config, is_placeholder
+from app.core.phone import format_phone
 from app.core.session import SAMPLE_RATE, CallSession
 
 log = logging.getLogger(__name__)
@@ -92,6 +93,9 @@ async def list_calls(limit: int, offset: int) -> list[dict[str, Any]]:
     result = []
     for r in rows:
         d = dict(r)
+        # Calls saved before numbers were formatted at call start get the same +1 (XXX) XXX-XXXX format
+        d["caller_number"] = format_phone(d.get("caller_number"))
+        d["gnome_number"] = format_phone(d.get("gnome_number"))
         d["scammer_number"] = d.get("caller_number")
         d["duration_seconds"] = d.get("duration_s")
         d["status"] = "ended" if d.get("ended_at") else "active"
@@ -114,6 +118,8 @@ async def get_call(call_id: UUID) -> dict[str, Any] | None:
         {"name": call["gnome_name"], "backstory": backstory, "personality": personality}
         if call["gnome_name"] else None
     )
+    call["caller_number"] = format_phone(call.get("caller_number"))
+    call["gnome_number"] = format_phone(call.get("gnome_number"))
     call["scammer_number"] = call.get("caller_number")
     call["duration_seconds"] = call.get("duration_s")
     call["status"] = "ended" if call.get("ended_at") else "active"

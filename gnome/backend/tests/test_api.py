@@ -71,7 +71,7 @@ def test_active_call_detail_and_update(client):
     data = r.json()
     assert data["id"] == call_id
     assert data["status"] == "active"
-    assert data["scammer_number"] == "+15550001111"
+    assert data["scammer_number"] == "+1 (555) 000-1111"  # formatted from Twilio's +15550001111
 
     # Combined update works
     up = client.post(f"/api/calls/{call_id}/gnome/update", json={
