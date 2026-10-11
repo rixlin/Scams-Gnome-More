@@ -6,6 +6,9 @@ CREATE TABLE IF NOT EXISTS calls (
     id                UUID PRIMARY KEY,
     twilio_call_sid   TEXT UNIQUE,
     caller_number     TEXT,
+    region            TEXT,
+    country           TEXT,
+    gnome_number      TEXT,
     gnome_name        TEXT,
     gnome_backstory   TEXT,
     gnome_personality JSONB,
@@ -15,6 +18,9 @@ CREATE TABLE IF NOT EXISTS calls (
     end_reason        TEXT,
     transcript        JSONB NOT NULL DEFAULT '[]'::jsonb
 );
+ALTER TABLE calls ADD COLUMN IF NOT EXISTS region TEXT;
+ALTER TABLE calls ADD COLUMN IF NOT EXISTS country TEXT;
+ALTER TABLE calls ADD COLUMN IF NOT EXISTS gnome_number TEXT;
 CREATE INDEX IF NOT EXISTS calls_started_at_idx ON calls (started_at DESC);
 
 -- At most one recording per call. Stereo WAV: left = caller, right = gnome

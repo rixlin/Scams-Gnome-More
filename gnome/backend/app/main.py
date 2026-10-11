@@ -40,9 +40,19 @@ async def lifespan(app: FastAPI):
     await repo.close()
 
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="Gnome backend", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(settings.router)
 app.include_router(gnome.router)
+app.include_router(gnome.mode_router)
 app.include_router(calls.router)
 app.include_router(twilio_hooks.router)
 app.include_router(twilio_stream.router)
@@ -54,6 +64,16 @@ if get_config().enable_demo:
 @app.get("/health")
 async def health() -> dict:
     return {"ok": True, "db": repo.pool is not None, "active_calls": len(registry.active())}
+
+
+@app.get("/api/health")
+async def api_health() -> dict:
+    return await health()
+
+
+@app.get("/api/ping")
+async def ping() -> dict:
+    return {"ok": True, "pong": True}
 
 
 if __name__ == "__main__":

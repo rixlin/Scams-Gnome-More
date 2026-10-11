@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   PhoneOff,
@@ -12,26 +13,39 @@ import {
   AlertTriangle,
   Calendar,
   Globe,
+  Trash2,
+  Copy,
+  Check,
 } from "lucide-react";
 import { CallSessionDetail } from "../../lib/types";
 import { useCallDuration } from "../../hooks/useCallDuration";
 import { formatDuration, formatCallDateTime, formatRegionWithCountry } from "../../lib/utils";
 import { useNotification } from "../notifications/NotificationProvider";
+import { deleteCall } from "../../lib/api";
 
 interface SessionHeaderProps {
   call: CallSessionDetail;
   onTerminate: (reason?: string) => Promise<void>;
   isTerminating?: boolean;
+  onDelete?: () => Promise<void>;
 }
 
 export const SessionHeader: React.FC<SessionHeaderProps> = ({
   call,
   onTerminate,
   isTerminating = false,
+  onDelete,
 }) => {
+  const router = useRouter();
   const { notify } = useNotification();
+  const [copied, setCopied] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isClosingConfirm, setIsClosingConfirm] = useState(false);
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isClosingDeleteConfirm, setIsClosingDeleteConfirm] = useState(false);
+  const [isDeletingCall, setIsDeletingCall] = useState(false);
+
   const elapsed = useCallDuration(
     call.started_at,
     call.status,
@@ -45,6 +59,14 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
     setTimeout(() => {
       setShowConfirm(false);
       setIsClosingConfirm(false);
+    }, 160);
+  };
+
+  const handleCloseDeleteConfirm = () => {
+    setIsClosingDeleteConfirm(true);
+    setTimeout(() => {
+      setShowDeleteConfirm(false);
+      setIsClosingDeleteConfirm(false);
     }, 160);
   };
 
@@ -65,6 +87,31 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
     }, 160);
   };
 
+  const handleConfirmDelete = async () => {
+    setIsDeletingCall(true);
+    try {
+      if (onDelete) {
+        await onDelete();
+      } else {
+        await deleteCall(call.id);
+        notify.success(
+          "Call Deleted",
+          `Session #${call.id.slice(0, 8)} was permanently deleted.`
+        );
+        router.push("/");
+      }
+    } catch (err: unknown) {
+      notify.error(
+        "Failed to Delete Call",
+        err instanceof Error ? err.message : "An error occurred while deleting the session."
+      );
+    } finally {
+      setIsDeletingCall(false);
+      setShowDeleteConfirm(false);
+      setIsClosingDeleteConfirm(false);
+    }
+  };
+
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-lg space-y-4">
       {/* Top Bar: Back link, status, and Terminate button */}
@@ -79,9 +126,27 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
           </Link>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold text-zinc-100 font-mono">
-                Session #{call.id.slice(0, 8)}
-              </h1>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(call.id);
+                  setCopied(true);
+                  notify.success(
+                    "Copied to Clipboard",
+                    `Session ID #${call.id} copied.`
+                  );
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="group/copy flex items-center gap-2 text-lg font-bold text-zinc-100 hover:text-emerald-400 font-mono transition-colors cursor-pointer"
+                title={copied ? "Copied ID to clipboard!" : `Click to copy ID: ${call.id}`}
+              >
+                <span>Session #{call.id.slice(0, 8)}</span>
+                {copied ? (
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 animate-in fade-in" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5 text-zinc-500 group-hover/copy:text-zinc-300 opacity-60 group-hover/copy:opacity-100 transition-opacity shrink-0" />
+                )}
+              </button>
               {isActive ? (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 animate-pulse">
                   <span className="w-2 h-2 rounded-full bg-emerald-400" />
@@ -110,7 +175,7 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
           </div>
         </div>
 
-        {/* Timer & Termination */}
+        {/* Timer, Delete (Ended Calls), & Termination (Active Calls) */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
             <Clock className="w-4 h-4 text-zinc-400" />
@@ -119,6 +184,18 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
               {formatDuration(elapsed)}
             </span>
           </div>
+
+          {!isActive && (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={isDeletingCall}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-800/60 text-red-300 hover:text-red-100 text-xs font-semibold shadow-sm transition-all hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:active:scale-100 disabled:opacity-50"
+              title="Permanently delete this ended call"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+              <span>{isDeletingCall ? "Deleting..." : "Delete Call"}</span>
+            </button>
+          )}
 
           {isActive && (
             <button
@@ -133,7 +210,7 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
         </div>
       </div>
 
-      {/* Confirmation Modal */}
+      {/* Terminate Active Call Confirmation Modal */}
       {(showConfirm || isClosingConfirm) && (
         <div
           onClick={handleCloseConfirm}
@@ -172,6 +249,52 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
         </div>
       )}
 
+      {/* Delete Ended Call Confirmation Modal */}
+      {(showDeleteConfirm || isClosingDeleteConfirm) && (
+        <div
+          onClick={handleCloseDeleteConfirm}
+          className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px] ${
+            isClosingDeleteConfirm ? "animate-overlay-fade-out" : "animate-overlay-fade"
+          }`}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-md bg-zinc-900 border border-red-800/80 rounded-2xl p-6 shadow-2xl space-y-4 ${
+              isClosingDeleteConfirm ? "animate-dialog-zoom-out" : "animate-dialog-zoom"
+            }`}
+          >
+            <div className="flex items-center gap-3 text-red-400">
+              <Trash2 className="w-6 h-6 shrink-0" />
+              <h3 className="text-base font-bold text-zinc-100">Delete Call Session?</h3>
+            </div>
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Are you sure you want to permanently delete this call record with scammer{" "}
+              <span className="font-mono font-semibold text-zinc-100">
+                {call.scammer_number}
+              </span>
+              ? This action cannot be undone and will permanently remove audio recordings and transcripts.
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={handleCloseDeleteConfirm}
+                disabled={isDeletingCall}
+                className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-all hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:active:scale-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={isDeletingCall}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold shadow-md transition-all hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:active:scale-100 disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeletingCall ? "Deleting..." : "Yes, Delete Session"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Call Details Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
         <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/80">
@@ -199,7 +322,10 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
             <User className="w-3.5 h-3.5 text-emerald-400" />
             Assigned Gnome
           </div>
-          <div className="text-sm font-bold text-emerald-300 truncate">
+          <div
+            className="text-sm font-bold text-emerald-300 truncate cursor-help"
+            title={call.gnome?.name || "Assigned Gnome"}
+          >
             {call.gnome?.name || "Assigned Gnome"}
           </div>
         </div>

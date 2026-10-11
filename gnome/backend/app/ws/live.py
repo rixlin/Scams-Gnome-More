@@ -51,8 +51,31 @@ async def _pump(ws: WebSocket, channel: str, snapshot: list[str]) -> None:
         hub.unsubscribe(channel, q)
 
 
+@router.websocket("/ws/ping")
+async def ws_ping(ws: WebSocket) -> None:
+    await ws.accept()
+    try:
+        await ws.send_json({"type": "pong", "ts": datetime.now(timezone.utc).isoformat()})
+        while True:
+            msg = await ws.receive_text()
+            await ws.send_json({"type": "pong", "received": msg, "ts": datetime.now(timezone.utc).isoformat()})
+    except WebSocketDisconnect:
+        pass
+
+
 @router.websocket("/ws/live/{channel}")
 async def live(ws: WebSocket, channel: str) -> None:
+    if channel == "ping":
+        await ws.accept()
+        try:
+            await ws.send_json({"type": "pong", "ts": datetime.now(timezone.utc).isoformat()})
+            while True:
+                msg = await ws.receive_text()
+                await ws.send_json({"type": "pong", "received": msg, "ts": datetime.now(timezone.utc).isoformat()})
+        except WebSocketDisconnect:
+            pass
+        return
+
     if channel == ACTIVE_CHANNEL:
         await ws.accept()
         snapshot = [

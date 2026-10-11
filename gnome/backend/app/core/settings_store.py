@@ -15,6 +15,7 @@ DEFAULTS: dict[str, Any] = {
     "generate_new_gnome_per_call": True,
     "fixed_gnome": None,
     "aggression": 3,
+    "gnome_mode": "destroyer",  # mode new calls start in: "destroyer" or "whimsy"
 }
 
 _current: dict[str, Any] = dict(DEFAULTS)

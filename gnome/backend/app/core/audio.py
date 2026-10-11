@@ -80,3 +80,19 @@ def stereo_to_mono_wav(data: bytes) -> bytes:
         w.setframerate(rate)
         w.writeframes(frames.tobytes())
     return buf.getvalue()
+
+
+def extract_channel_wav(data: bytes, channel_idx: int) -> bytes:
+    """Extract a single channel (0=left/caller, 1=right/gnome) from a stereo WAV as a mono WAV."""
+    with wave.open(io.BytesIO(data)) as w:
+        rate, channels = w.getframerate(), w.getnchannels()
+        frames = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
+    if channels == 2:
+        frames = frames.reshape(-1, 2)[:, channel_idx]
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(frames.tobytes())
+    return buf.getvalue()

@@ -18,7 +18,22 @@ def _db_errors(exc: repo.DatabaseUnavailable) -> HTTPException:
 @router.get("/active", response_model=list[ActiveCall])
 async def active_calls() -> list[ActiveCall]:
     return [
-        ActiveCall(call_id=s.id, caller_number=s.caller_number, gnome=s.persona, elapsed_s=round(s.elapsed(), 1))
+        ActiveCall(
+            id=s.id,
+            call_id=s.id,
+            caller_number=s.caller_number,
+            scammer_number=s.caller_number,
+            region=s.region,
+            country=s.country,
+            gnome_number=s.gnome_number,
+            gnome_name=s.persona.name if s.persona else None,
+            gnome=s.persona,
+            started_at=s.started_at,
+            ended_at=None,
+            elapsed_s=round(s.elapsed(), 1),
+            duration_seconds=int(s.elapsed()),
+            status="active",
+        )
         for s in registry.active()
     ]
 
@@ -33,6 +48,9 @@ async def list_calls(limit: int = Query(50, ge=1, le=200), offset: int = Query(0
 
 @router.get("/{call_id}", response_model=CallDetail)
 async def call_detail(call_id: UUID):
+    active_session = registry.get(call_id)
+    if active_session is not None:
+        return active_session.to_call_detail()
     try:
         call = await repo.get_call(call_id)
     except repo.DatabaseUnavailable as e:
@@ -43,15 +61,19 @@ async def call_detail(call_id: UUID):
 
 
 @router.get("/{call_id}/audio")
-async def call_audio(call_id: UUID, mono: bool = False) -> Response:
-    """The call recording: stereo WAV (left = caller, right = gnome), or both mixed into one channel."""
+async def call_audio(call_id: UUID, mono: bool = False, track: str | None = None) -> Response:
+    """The call recording: stereo WAV (left = caller, right = gnome), mono mix, or isolated caller/gnome track."""
     try:
         wav = await repo.get_call_audio(call_id)
     except repo.DatabaseUnavailable as e:
         raise _db_errors(e)
     if wav is None:
         raise HTTPException(404, "no audio for this call")
-    if mono:
+    if track == "caller":
+        wav = audio.extract_channel_wav(wav, 0)
+    elif track == "gnome":
+        wav = audio.extract_channel_wav(wav, 1)
+    elif mono or track == "mono":
         wav = audio.stereo_to_mono_wav(wav)
     return Response(content=wav, media_type="audio/wav")
 
@@ -63,4 +85,17 @@ async def terminate(call_id: UUID) -> dict:
         raise HTTPException(404, "no active call with that id")
     await lifecycle.hang_up(session)
     await lifecycle.end_call(session, "terminated")
+    return {"ok": True}
+
+
+@router.delete("/{call_id}")
+async def delete_call(call_id: UUID) -> dict:
+    if registry.get(call_id) is not None:
+        raise HTTPException(400, "cannot delete active call")
+    try:
+        deleted = await repo.delete_call(call_id)
+    except repo.DatabaseUnavailable as e:
+        raise _db_errors(e)
+    if not deleted:
+        raise HTTPException(404, "call not found")
     return {"ok": True}

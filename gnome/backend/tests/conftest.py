@@ -18,7 +18,7 @@ from app.main import app  # noqa: E402
 
 @pytest.fixture
 def client(monkeypatch):
-    async def fake_persona(guidance=""):
+    async def fake_persona(guidance="", mode="destroyer"):
         return FALLBACK_PERSONA
 
     async def fake_run(self):  # no Gemini/ElevenLabs in tests

@@ -24,7 +24,7 @@ class FakeTTS:
     async def close(self): pass
 
     async def audio(self):
-        yield audio.pcm16_to_ulaw(np.full(160, 1000, np.int16))
+        yield audio.pcm16_to_ulaw(np.full(160, 1000, np.int16)), None
 
 
 def _msg(**content) -> types.LiveServerMessage:
@@ -83,7 +83,7 @@ def test_turn_produces_transcript_audio_and_mark(monkeypatch, modality):
     ]
     assert [m["event"] for m in sent] == ["media", "mark"]
     assert all(m["streamSid"] == "MZ1" for m in sent)
-    assert session.gnome_speaking and session.gnome_state == "speaking"
+    assert session.gnome_speaking and session.gnome_state == "responding"
 
     agent.on_mark(sent[-1]["mark"]["name"])
     assert not session.gnome_speaking and session.gnome_state == "listening"
@@ -168,7 +168,7 @@ def test_playback_gets_a_head_start_so_the_line_never_goes_quiet(monkeypatch):
         async def audio(self):
             for _ in range(4):  # four 0.4 s chunks, produced 0.1 s apart
                 await asyncio.sleep(0.1)
-                yield audio.pcm16_to_ulaw(np.full(3200, 1000, np.int16))
+                yield audio.pcm16_to_ulaw(np.full(3200, 1000, np.int16)), None
 
     monkeypatch.setattr(gnome_mod, "TTSStream", SlowTTS)
     monkeypatch.setattr(gnome_mod.get_config(), "elevenlabs_api_key", "test-key")
@@ -193,3 +193,45 @@ def test_playback_gets_a_head_start_so_the_line_never_goes_quiet(monkeypatch):
     assert len(media) == 4
     # the first three chunks (1.2 s >= 1 s head start) are released together, not one by one
     assert media[2] - media[0] < 0.02
+
+
+def test_gnome_words_reach_the_transcript_as_they_are_spoken(monkeypatch):
+    """Live transcript gets the gnome's words on the playback clock, and the final line after the audio ends."""
+    import time
+
+    words = "Answer my riddle "
+    chars = list(words)
+    starts = [i * 25 for i in range(len(chars))]  # 25 ms per character -> ~0.43 s of speech
+
+    class AlignedTTS(FakeTTS):
+        async def audio(self):
+            yield audio.pcm16_to_ulaw(np.full(4000, 1000, np.int16)), (chars, starts)  # 0.5 s of audio
+
+    monkeypatch.setattr(gnome_mod, "TTSStream", AlignedTTS)
+    monkeypatch.setattr(gnome_mod.get_config(), "elevenlabs_api_key", "test-key")
+
+    async def scenario():
+        session = CallSession(call_sid="CA5", caller_number=None)
+        session.persona, session.voice_id = FALLBACK_PERSONA, "test-voice"
+        events: list[tuple[float, dict]] = []
+        session.publish = lambda type_, data: events.append((time.monotonic(), data)) if type_ == "transcript" else None
+
+        async def send(msg):
+            pass
+
+        session.stream_sid, session.send_to_twilio = "MZ5", send
+        agent = GnomeAgent(session)
+        t0 = time.monotonic()
+        agent._on_gnome_text("Answer my riddle")
+        agent._end_gnome_turn()
+        await asyncio.sleep(0.8)
+        return t0, events
+
+    t0, events = asyncio.run(scenario())
+    partials = [(t - t0, d["text"]) for t, d in events if not d["final"]]
+    finals = [(t - t0, d) for t, d in events if d["final"]]
+    assert [text for _, text in partials] == ["Answer", "Answer my", "Answer my riddle"]
+    assert partials[0][0] < 0.25 < partials[-1][0]  # spread over the speech, not all at once
+    assert len(finals) == 1 and finals[0][1]["text"] == "Answer my riddle"
+    assert finals[0][0] >= 0.45  # only after the 0.5 s of audio has played
+    assert all(d["turn_id"] == "gnome-1" for _, d in events)

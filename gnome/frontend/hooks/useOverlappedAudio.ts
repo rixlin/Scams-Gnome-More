@@ -1,12 +1,25 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { getWsBaseUrl } from "../lib/api";
+import { useBackendUrlVersion } from "./useBackendUrlVersion";
 
 interface UseOverlappedAudioOptions {
   callId: string;
   wsBaseUrl?: string;
   autoPlay?: boolean;
 }
+
+type Channel = "user" | "gnome";
+type WsStatus = "idle" | "connecting" | "open" | "closed" | "error";
+
+// Small lead so the first chunk after a gap doesn't start in the past and get clipped
+const START_LEAD_S = 0.08;
+// Caller audio arrives in real time; anything queued further ahead than this is stale lag
+// (e.g. after a tab was in the background), so drop it to stay live.
+// Gnome audio arrives in bursts faster than real time, so it's allowed to queue up much further.
+const MAX_QUEUE_AHEAD_S: Record<Channel, number> = { user: 1.0, gnome: 30 };
+const MAX_RECONNECTS = 5;
 
 export function useOverlappedAudio({
   callId,
@@ -20,12 +33,8 @@ export function useOverlappedAudio({
   const [userLevel, setUserLevel] = useState(0);
   const [gnomeLevel, setGnomeLevel] = useState(0);
 
-  const [userWsStatus, setUserWsStatus] = useState<"idle" | "connecting" | "open" | "closed" | "error">(
-    callId ? "connecting" : "idle"
-  );
-  const [gnomeWsStatus, setGnomeWsStatus] = useState<"idle" | "connecting" | "open" | "closed" | "error">(
-    callId ? "connecting" : "idle"
-  );
+  const [userWsStatus, setUserWsStatus] = useState<WsStatus>(callId ? "connecting" : "idle");
+  const [gnomeWsStatus, setGnomeWsStatus] = useState<WsStatus>(callId ? "connecting" : "idle");
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const userGainRef = useRef<GainNode | null>(null);
@@ -33,25 +42,37 @@ export function useOverlappedAudio({
   const userAnalyserRef = useRef<AnalyserNode | null>(null);
   const gnomeAnalyserRef = useRef<AnalyserNode | null>(null);
 
-  const userWsRef = useRef<WebSocket | null>(null);
-  const gnomeWsRef = useRef<WebSocket | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
-  const getWsHost = useCallback(() => {
-    if (wsBaseUrl) return wsBaseUrl;
-    if (typeof window !== "undefined") {
-      const saved = window.localStorage.getItem("gnome_ws_url");
-      if (saved) return saved;
-      const host = window.location.hostname || "localhost";
-      return `ws://${host}:8000`;
-    }
-    return "ws://localhost:8000";
-  }, [wsBaseUrl]);
+  const isMutedRef = useRef(isMuted);
+  const userVolumeRef = useRef(userVolume);
+  const gnomeVolumeRef = useRef(gnomeVolume);
+  const nextPlayTimesRef = useRef<Record<Channel, number>>({ user: 0, gnome: 0 });
 
-  // Initialize Web Audio Context and separate signal paths
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
+
+  useEffect(() => {
+    userVolumeRef.current = userVolume;
+  }, [userVolume]);
+
+  useEffect(() => {
+    gnomeVolumeRef.current = gnomeVolume;
+  }, [gnomeVolume]);
+
+  const getWsHost = useCallback(() => wsBaseUrl || getWsBaseUrl(), [wsBaseUrl]);
+  const urlVersion = useBackendUrlVersion(); // reconnect when Settings change the backend URL
+
+  // Create (or resume) the Web Audio graph. Browsers only let audio start from a user gesture,
+  // so this must be called from a click handler (the "Start Stream" button), never from a socket message.
   const ensureAudioContext = useCallback(() => {
     if (!audioCtxRef.current) {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext;
       if (!AudioCtx) return null;
       const ctx = new AudioCtx();
 
@@ -70,8 +91,8 @@ export function useOverlappedAudio({
       gAnalyser.connect(gGain);
       gGain.connect(ctx.destination);
 
-      uGain.gain.value = isMuted ? 0 : userVolume;
-      gGain.gain.value = isMuted ? 0 : gnomeVolume;
+      uGain.gain.value = isMutedRef.current ? 0 : userVolumeRef.current;
+      gGain.gain.value = isMutedRef.current ? 0 : gnomeVolumeRef.current;
 
       audioCtxRef.current = ctx;
       userGainRef.current = uGain;
@@ -81,127 +102,139 @@ export function useOverlappedAudio({
     }
 
     if (audioCtxRef.current.state === "suspended") {
-      audioCtxRef.current.resume();
+      audioCtxRef.current.resume().catch(() => {});
     }
     return audioCtxRef.current;
-  }, [isMuted, userVolume, gnomeVolume]);
+  }, []);
 
-  // Play audio buffer into a specific channel
-  const playAudioChunk = useCallback(async (channel: "user" | "gnome", arrayBuffer: ArrayBuffer) => {
-    const ctx = ensureAudioContext();
-    if (!ctx) return;
+  // Play raw 16-bit little-endian PCM mono audio (8 kHz from the backend) on one channel
+  const playPcm16Chunk = useCallback((channel: Channel, pcmBase64: string, sampleRate = 8000) => {
+    const ctx = audioCtxRef.current;
+    // Not listening yet, or muted: drop live audio instead of queueing it to play late
+    if (!ctx || ctx.state !== "running" || isMutedRef.current) return;
 
     try {
-      // Decode audio chunk (PCM, MP3, WAV, etc.)
-      const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
-      const source = ctx.createBufferSource();
-      source.buffer = audioBuffer;
+      const binary = atob(pcmBase64);
+      const sampleCount = Math.floor(binary.length / 2);
+      if (sampleCount === 0) return;
 
-      const targetAnalyser = channel === "user" ? userAnalyserRef.current : gnomeAnalyserRef.current;
-      if (targetAnalyser) {
-        source.connect(targetAnalyser);
-      } else {
-        source.connect(ctx.destination);
+      // Decode 16-bit signed integer samples safely without alignment issues
+      const float32 = new Float32Array(sampleCount);
+      for (let i = 0; i < sampleCount; i++) {
+        const lo = binary.charCodeAt(i * 2);
+        const hi = binary.charCodeAt(i * 2 + 1);
+        let val = (hi << 8) | lo;
+        if (val >= 0x8000) val -= 0x10000;
+        float32[i] = val / 32768.0;
       }
-      source.start();
+
+      const buffer = ctx.createBuffer(1, sampleCount, sampleRate);
+      buffer.getChannelData(0).set(float32);
+
+      const now = ctx.currentTime;
+      const queued = nextPlayTimesRef.current[channel];
+      // Fell behind (gap in the stream): restart just ahead of now. Too far ahead: drop to stay live.
+      const startAt = queued < now ? now + START_LEAD_S : queued;
+      if (startAt - now > MAX_QUEUE_AHEAD_S[channel]) return;
+
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      const targetAnalyser = channel === "user" ? userAnalyserRef.current : gnomeAnalyserRef.current;
+      source.connect(targetAnalyser ?? ctx.destination);
+      source.start(startAt);
+      nextPlayTimesRef.current[channel] = startAt + buffer.duration;
     } catch {
-      // Fallback: If decodeAudioData fails (e.g. raw PCM without headers), ignore or handle gracefully
+      // Ignored
     }
-  }, [ensureAudioContext]);
+  }, []);
 
   // Volume & Mute synchronizers
   const setUserVolume = useCallback((val: number) => {
     setUserVolumeState(val);
-    if (userGainRef.current && !isMuted) {
+    if (userGainRef.current && !isMutedRef.current) {
       userGainRef.current.gain.value = val;
     }
-  }, [isMuted]);
+  }, []);
 
   const setGnomeVolume = useCallback((val: number) => {
     setGnomeVolumeState(val);
-    if (gnomeGainRef.current && !isMuted) {
+    if (gnomeGainRef.current && !isMutedRef.current) {
       gnomeGainRef.current.gain.value = val;
     }
-  }, [isMuted]);
+  }, []);
 
   const toggleMute = useCallback(() => {
-    setIsMuted((prev) => {
-      const next = !prev;
-      if (userGainRef.current) {
-        userGainRef.current.gain.value = next ? 0 : userVolume;
-      }
-      if (gnomeGainRef.current) {
-        gnomeGainRef.current.gain.value = next ? 0 : gnomeVolume;
-      }
-      return next;
-    });
-  }, [userVolume, gnomeVolume]);
+    const next = !isMutedRef.current;
+    isMutedRef.current = next;
+    setIsMuted(next);
+    if (!next) {
+      // Unmuting is a click, so the browser allows audio to start here
+      ensureAudioContext();
+      nextPlayTimesRef.current = { user: 0, gnome: 0 };
+    }
+    if (userGainRef.current) {
+      userGainRef.current.gain.value = next ? 0 : userVolumeRef.current;
+    }
+    if (gnomeGainRef.current) {
+      gnomeGainRef.current.gain.value = next ? 0 : gnomeVolumeRef.current;
+    }
+  }, [ensureAudioContext]);
 
-  // Setup WebSockets for both independent streams
+  // Live feed: /ws/live/{callId} carries both audio.caller and audio.gnome (plus transcript/telemetry)
   useEffect(() => {
     if (!callId || !autoPlay) return;
 
-    const baseHost = getWsHost();
-    const userWsUrl = `${baseHost}/ws/calls/${callId}/audio/user`;
-    const gnomeWsUrl = `${baseHost}/ws/calls/${callId}/audio/gnome`;
+    const liveWsUrl = `${getWsHost()}/ws/live/${callId}`;
+    let disposed = false;
+    let reconnects = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
-    // Connect User audio WS
-    const userWs = new WebSocket(userWsUrl);
-    userWs.binaryType = "arraybuffer";
-    userWsRef.current = userWs;
-
-    userWs.onopen = () => setUserWsStatus("open");
-    userWs.onclose = () => setUserWsStatus("closed");
-    userWs.onerror = () => setUserWsStatus("error");
-    userWs.onmessage = async (e) => {
-      if (e.data instanceof ArrayBuffer) {
-        playAudioChunk("user", e.data);
-      } else if (typeof e.data === "string") {
-        try {
-          const parsed = JSON.parse(e.data);
-          const b64 = parsed.audio || parsed.payload_base64;
-          if (b64) {
-            const binary = atob(b64);
-            const bytes = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i++) {
-              bytes[i] = binary.charCodeAt(i);
-            }
-            playAudioChunk("user", bytes.buffer);
-          }
-        } catch {
-          // Non-JSON string or ping
-        }
-      }
+    const setStatus = (s: WsStatus) => {
+      setUserWsStatus(s);
+      setGnomeWsStatus(s);
     };
 
-    // Connect Gnome audio WS
-    const gnomeWs = new WebSocket(gnomeWsUrl);
-    gnomeWs.binaryType = "arraybuffer";
-    gnomeWsRef.current = gnomeWs;
+    const connect = () => {
+      setStatus("connecting");
+      const ws = new WebSocket(liveWsUrl);
+      wsRef.current = ws;
 
-    gnomeWs.onopen = () => setGnomeWsStatus("open");
-    gnomeWs.onclose = () => setGnomeWsStatus("closed");
-    gnomeWs.onerror = () => setGnomeWsStatus("error");
-    gnomeWs.onmessage = async (e) => {
-      if (e.data instanceof ArrayBuffer) {
-        playAudioChunk("gnome", e.data);
-      } else if (typeof e.data === "string") {
+      ws.onopen = () => {
+        reconnects = 0;
+        setStatus("open");
+      };
+      ws.onerror = () => setStatus("error");
+      ws.onclose = (e) => {
+        if (disposed) return;
+        // 1008 = backend says this call isn't active (ended or unknown id): don't retry
+        if (e.code === 1008 || reconnects >= MAX_RECONNECTS) {
+          setStatus(e.code === 1008 ? "closed" : "error");
+          return;
+        }
+        reconnects += 1;
+        setStatus("connecting");
+        retryTimer = setTimeout(connect, Math.min(1000 * 2 ** (reconnects - 1), 8000));
+      };
+
+      ws.onmessage = (e) => {
+        if (typeof e.data !== "string") return;
         try {
-          const parsed = JSON.parse(e.data);
-          const b64 = parsed.audio || parsed.payload_base64;
-          if (b64) {
-            const binary = atob(b64);
-            const bytes = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i++) {
-              bytes[i] = binary.charCodeAt(i);
-            }
-            playAudioChunk("gnome", bytes.buffer);
+          const payload = JSON.parse(e.data);
+          const data = payload.data || payload;
+          if (payload.type === "audio.caller" && data.pcm16) {
+            playPcm16Chunk("user", data.pcm16, data.sample_rate || 8000);
+          } else if (payload.type === "audio.gnome" && data.pcm16) {
+            playPcm16Chunk("gnome", data.pcm16, data.sample_rate || 8000);
+          } else if (payload.type === "call.ended") {
+            disposed = true; // call is over; the backend will close the socket, no reconnect
           }
         } catch {
-          // Non-JSON string or ping
+          // Ignored
         }
-      }
+      };
     };
+
+    connect();
 
     // Level meter animation loop
     const updateLevels = () => {
@@ -227,11 +260,20 @@ export function useOverlappedAudio({
     animFrameRef.current = requestAnimationFrame(updateLevels);
 
     return () => {
-      if (userWs) userWs.close();
-      if (gnomeWs) gnomeWs.close();
+      disposed = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      wsRef.current?.close();
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [callId, autoPlay, getWsHost, playAudioChunk]);
+  }, [callId, autoPlay, getWsHost, playPcm16Chunk, urlVersion]);
+
+  // Release the audio device when leaving the page
+  useEffect(() => {
+    return () => {
+      audioCtxRef.current?.close().catch(() => {});
+      audioCtxRef.current = null;
+    };
+  }, []);
 
   return {
     isMuted,

@@ -13,8 +13,11 @@ log = logging.getLogger(__name__)
 
 _URL = (
     "wss://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream-input"
-    "?model_id={model}&output_format=ulaw_8000"
+    "?model_id={model}&output_format=ulaw_8000&sync_alignment=true"
 )
+
+# For one audio chunk: its characters, and when each one starts (ms from the start of the chunk)
+Alignment = tuple[list[str], list[int]]
 
 
 class TTSStream:
@@ -51,13 +54,16 @@ class TTSStream:
         if self._ws is not None:
             await self._ws.send(json.dumps({"text": ""}))
 
-    async def audio(self) -> AsyncIterator[bytes]:
+    async def audio(self) -> AsyncIterator[tuple[bytes, Alignment | None]]:
+        """Audio chunks with the timing of the characters they speak (None if ElevenLabs sent none)."""
         assert self._ws is not None
         try:
             async for raw in self._ws:
                 msg = json.loads(raw)
                 if msg.get("audio"):
-                    yield base64.b64decode(msg["audio"])
+                    a = msg.get("alignment") or {}
+                    alignment = (a["chars"], a["charStartTimesMs"]) if a.get("chars") and a.get("charStartTimesMs") else None
+                    yield base64.b64decode(msg["audio"]), alignment
                 if msg.get("isFinal"):
                     break
                 if msg.get("error"):

@@ -9,6 +9,7 @@ from uuid import UUID
 import asyncpg
 
 from app.config import get_config, is_placeholder
+from app.core.phone import format_phone
 from app.core.session import SAMPLE_RATE, CallSession
 
 log = logging.getLogger(__name__)
@@ -66,11 +67,13 @@ async def save_call(session: CallSession) -> None:
     async with _pool().acquire() as conn, conn.transaction():
         await conn.execute(
             """INSERT INTO calls (id, twilio_call_sid, caller_number, gnome_name, gnome_backstory,
-                                  gnome_personality, started_at, ended_at, duration_s, end_reason, transcript)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)""",
+                                  gnome_personality, started_at, ended_at, duration_s, end_reason, transcript,
+                                  region, country, gnome_number)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)""",
             session.id, session.call_sid, session.caller_number,
             persona.name if persona else None, persona.backstory if persona else None, personality,
             session.started_at, session.ended_at, duration, session.end_reason, transcript,
+            session.region, session.country, session.gnome_number,
         )
         if wav is not None:
             await conn.execute(
@@ -79,7 +82,7 @@ async def save_call(session: CallSession) -> None:
             )
 
 
-_SUMMARY_COLS = """c.id, c.twilio_call_sid, c.caller_number, c.gnome_name,
+_SUMMARY_COLS = """c.id, c.twilio_call_sid, c.caller_number, c.region, c.country, c.gnome_number, c.gnome_name,
                    c.started_at, c.ended_at, c.duration_s, c.end_reason"""
 
 
@@ -87,7 +90,17 @@ async def list_calls(limit: int, offset: int) -> list[dict[str, Any]]:
     rows = await _pool().fetch(
         f"SELECT {_SUMMARY_COLS} FROM calls c ORDER BY c.started_at DESC LIMIT $1 OFFSET $2", limit, offset
     )
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = dict(r)
+        # Calls saved before numbers were formatted at call start get the same +1 (XXX) XXX-XXXX format
+        d["caller_number"] = format_phone(d.get("caller_number"))
+        d["gnome_number"] = format_phone(d.get("gnome_number"))
+        d["scammer_number"] = d.get("caller_number")
+        d["duration_seconds"] = d.get("duration_s")
+        d["status"] = "ended" if d.get("ended_at") else "active"
+        result.append(d)
+    return result
 
 
 async def get_call(call_id: UUID) -> dict[str, Any] | None:
@@ -105,8 +118,21 @@ async def get_call(call_id: UUID) -> dict[str, Any] | None:
         {"name": call["gnome_name"], "backstory": backstory, "personality": personality}
         if call["gnome_name"] else None
     )
-    call["utterances"] = sorted(call.pop("transcript"), key=lambda u: u["seq"])
+    call["caller_number"] = format_phone(call.get("caller_number"))
+    call["gnome_number"] = format_phone(call.get("gnome_number"))
+    call["scammer_number"] = call.get("caller_number")
+    call["duration_seconds"] = call.get("duration_s")
+    call["status"] = "ended" if call.get("ended_at") else "active"
+    call["recording_status"] = "available" if call.get("has_audio") else "unavailable"
+    transcript_data = sorted(call.pop("transcript"), key=lambda u: u["seq"])
+    call["transcript"] = transcript_data
+    call["utterances"] = list(transcript_data)
     return call
+
+
+async def delete_call(call_id: UUID) -> bool:
+    res = await _pool().execute("DELETE FROM calls WHERE id = $1", call_id)
+    return res != "DELETE 0"
 
 
 async def get_call_audio(call_id: UUID) -> bytes | None:

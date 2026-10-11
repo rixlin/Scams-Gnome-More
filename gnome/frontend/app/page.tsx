@@ -101,9 +101,6 @@ export default function HomePage() {
   useEffect(() => {
     let active = true;
 
-    // Immediately sync debug and terminated calls
-    syncDebugCalls();
-
     async function initialFetch() {
       try {
         const data = await fetchCallSessions();
@@ -148,10 +145,13 @@ export default function HomePage() {
   }, [syncDebugCalls]);
 
   // Merge debug calls and backend calls, avoiding duplicates
-  const allCalls: CallSessionSummary[] = [
-    ...debugCalls,
-    ...backendCalls.filter((c) => !debugCalls.some((d) => d.id === c.id)),
-  ];
+  const allCalls: CallSessionSummary[] = useMemo(
+    () => [
+      ...debugCalls,
+      ...backendCalls.filter((c) => !debugCalls.some((d) => d.id === c.id)),
+    ],
+    [debugCalls, backendCalls]
+  );
 
   // Filter state
   const [searchNumber, setSearchNumber] = useState("");
@@ -753,7 +753,10 @@ export default function HomePage() {
                   {callToTerminate.scammer_number}
                 </span>{" "}
                 from{" "}
-                <span className="font-semibold text-emerald-300">
+                <span
+                  className="font-semibold text-emerald-300 cursor-help"
+                  title={callToTerminate.gnome_name}
+                >
                   {callToTerminate.gnome_name}
                 </span>.
               </p>
@@ -777,6 +780,9 @@ export default function HomePage() {
           </div>
         )}
       </main>
+
+      {/* Fade near the bottom of the screen to ease into the background */}
+      <div className="fixed bottom-0 left-0 right-0 h-16 pointer-events-none bg-gradient-to-t from-canvas to-transparent z-20" />
     </div>
   );
 }

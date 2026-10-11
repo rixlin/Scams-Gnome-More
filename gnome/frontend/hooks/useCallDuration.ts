@@ -31,14 +31,11 @@ export function useCallDuration(
 
   useEffect(() => {
     if (status !== "active") {
-      setElapsed(computeFinalDuration());
       return;
     }
 
     const startTime = new Date(startedAt).getTime();
     if (isNaN(startTime)) return;
-
-    setElapsed(Math.max(0, Math.floor((Date.now() - startTime) / 1000)));
 
     const interval = setInterval(() => {
       const now = Date.now();
@@ -46,7 +43,7 @@ export function useCallDuration(
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [startedAt, status, endedAt, initialDurationSeconds]);
+  }, [startedAt, status]);
 
   if (status !== "active") {
     return computeFinalDuration();

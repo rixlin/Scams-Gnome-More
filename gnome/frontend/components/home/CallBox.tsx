@@ -1,11 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
-import { Radio, Clock, Calendar, User, PhoneCall, ShieldAlert, Check } from "lucide-react";
+import { Radio, Clock, Calendar, User, PhoneCall, ShieldAlert, Check, Globe, Copy } from "lucide-react";
 import { CallSessionSummary } from "../../lib/types";
 import { useCallDuration } from "../../hooks/useCallDuration";
 import { formatDuration, formatCallDateTime, formatRegionWithCountry } from "../../lib/utils";
+import { useNotification } from "../notifications/NotificationProvider";
 
 interface CallBoxProps {
   call: CallSessionSummary;
@@ -22,6 +23,8 @@ export const CallBox: React.FC<CallBoxProps> = ({
   isSelected = false,
   onToggleSelect,
 }) => {
+  const { notify } = useNotification();
+  const [copied, setCopied] = useState(false);
   const elapsedSeconds = useCallDuration(
     call.started_at,
     call.status,
@@ -51,12 +54,12 @@ export const CallBox: React.FC<CallBoxProps> = ({
           : "border-zinc-800 bg-zinc-900/50 hover:border-zinc-700 hover:bg-zinc-900/80"
       }`}
     >
-      {/* Top Bar: Selection Checkbox / Status & Direct Action */}
+      {/* Top Bar: Status Indicator + Truncated Session ID (left) & End Call Action (right) */}
       <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           {isSelectionMode ? (
             <div
-              className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
+              className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 ${
                 isSelected
                   ? "bg-emerald-600 border-emerald-500 text-white"
                   : "bg-zinc-950 border-zinc-700 text-transparent hover:border-zinc-500"
@@ -66,42 +69,65 @@ export const CallBox: React.FC<CallBoxProps> = ({
             </div>
           ) : null}
 
+          {/* Status Indicator (LIVE / Ended) before the Call ID */}
           {isActive ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 animate-pulse">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 animate-pulse shrink-0">
               <span className="w-2 h-2 rounded-full bg-emerald-400" />
               LIVE
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700/50">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700/50 shrink-0">
               Ended
             </span>
           )}
-          <span
-            className="text-xs text-zinc-400 font-mono truncate max-w-[150px]"
-            title={formatRegionWithCountry(call)}
-          >
-            {formatRegionWithCountry(call)}
-          </span>
-        </div>
 
-        {isActive && onTerminate && !isSelectionMode && (
+          {/* Truncated Session ID with full ID hover & click-to-copy */}
           <button
+            type="button"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              onTerminate(call.id);
+              navigator.clipboard.writeText(call.id);
+              setCopied(true);
+              notify.success(
+                "Copied to Clipboard",
+                `Session ID #${call.id} copied.`
+              );
+              setTimeout(() => setCopied(false), 1500);
             }}
-            className="text-xs text-red-400 hover:text-red-300 hover:bg-red-950/40 px-2 py-1 rounded transition-all hover:scale-105 active:scale-95"
-            title="Terminate this call immediately"
+            className="group/copy inline-flex items-center gap-1 text-xs font-mono text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/50 transition-colors cursor-pointer px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800/80 truncate"
+            title={copied ? "Copied ID to clipboard!" : `Click to copy ID: ${call.id}`}
           >
-            End Call
+            <span>{copied ? "Copied!" : `#${call.id.slice(0, 8)}`}</span>
+            {copied ? (
+              <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+            ) : (
+              <Copy className="w-3 h-3 text-zinc-500 group-hover/copy:text-zinc-300 opacity-60 group-hover/copy:opacity-100 transition-opacity shrink-0" />
+            )}
           </button>
-        )}
+        </div>
+
+        {/* Right-aligned Actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          {isActive && onTerminate && !isSelectionMode && (
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onTerminate(call.id);
+              }}
+              className="text-xs text-red-400 hover:text-red-300 hover:bg-red-950/40 px-2 py-0.5 rounded transition-all hover:scale-105 active:scale-95"
+              title="Terminate this call immediately"
+            >
+              End Call
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Main Box Details */}
       <div className="my-4 space-y-3">
-        {/* Scammer Number */}
+        {/* Scammer Number & Region */}
         <div>
           <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500 flex items-center gap-1.5 mb-0.5">
             <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />
@@ -109,6 +135,14 @@ export const CallBox: React.FC<CallBoxProps> = ({
           </div>
           <div className="text-base font-bold text-zinc-100 font-mono">
             {call.scammer_number}
+          </div>
+          {/* Region moved under scammer number with Globe icon */}
+          <div
+            className="flex items-center gap-1.5 text-xs text-zinc-400 font-mono mt-1.5 cursor-help"
+            title={formatRegionWithCountry(call)}
+          >
+            <Globe className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+            <span className="truncate">Region: {formatRegionWithCountry(call)}</span>
           </div>
         </div>
 
@@ -119,7 +153,10 @@ export const CallBox: React.FC<CallBoxProps> = ({
               <User className="w-3.5 h-3.5 text-emerald-400" />
               Gnome Assigned
             </div>
-            <div className="text-sm font-semibold text-emerald-300 truncate">
+            <div
+              className="text-sm font-semibold text-emerald-300 truncate cursor-help"
+              title={call.gnome_name}
+            >
               {call.gnome_name}
             </div>
           </div>

@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Gnome Defense Console - Counter-Scam Operations",
+  title: "Management Console - Scam Gnome More",
   description:
     "Real-time management console for Gnome AI counter-scam interception and Twilio virtual phones.",
 };

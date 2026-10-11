@@ -1,33 +1,58 @@
 import {
   CallSessionSummary,
   CallSessionDetail,
+  GnomeMode,
+  GnomeState,
   LiveGnomeUpdateRequest,
+  PingResult,
   SystemSettings,
   TranscriptTurn,
 } from "./types";
 
-const getBaseUrl = (): string => {
-  if (typeof window !== "undefined") {
-    return (
-      process.env.NEXT_PUBLIC_BACKEND_URL ||
-      window.localStorage.getItem("gnome_backend_url") ||
-      "http://localhost:8000"
-    );
+// Public Cloudflare tunnel hostname of the backend (see gnome/backend/run.py)
+export const DEFAULT_BACKEND_URL = "https://api.gnomegrove.tech";
+
+// Fired after the URLs in Settings are saved, so open pages reconnect to the new backend right away
+export const BACKEND_URL_CHANGED_EVENT = "gnome_backend_url_changed";
+
+const savedSetting = (key: string): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key)?.trim() || null;
+  } catch {
+    return null;
   }
-  return process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 };
+
+// http(s)://host -> ws(s)://host, so an https backend always gets wss (browsers block ws:// from https pages)
+export const toWsUrl = (url: string): string => {
+  const trimmed = url.trim().replace(/\/+$/, "");
+  if (/^wss?:\/\//.test(trimmed)) return trimmed;
+  if (/^https?:\/\//.test(trimmed)) return trimmed.replace(/^http/, "ws");
+  return `wss://${trimmed}`;
+};
+
+// What the user saved in Settings wins over the build-time env default
+export const getBaseUrl = (): string =>
+  (savedSetting("gnome_backend_url") || process.env.NEXT_PUBLIC_BACKEND_URL || DEFAULT_BACKEND_URL)
+    .trim()
+    .replace(/\/+$/, "");
+
+// WebSocket base for /ws/live/{channel}; falls back to the REST URL
+export const getWsBaseUrl = (): string =>
+  toWsUrl(savedSetting("gnome_ws_url") || process.env.NEXT_PUBLIC_WS_URL || getBaseUrl());
 
 export async function checkBackendHealth(): Promise<boolean> {
   const baseUrl = getBaseUrl();
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2500);
-    const res = await fetch(`${baseUrl}/api/health`, {
+    const res = await fetch(`${baseUrl}/health`, {
       method: "GET",
       signal: controller.signal,
       cache: "no-store",
     }).catch(async () => {
-      return await fetch(`${baseUrl}/api/calls`, {
+      return await fetch(`${baseUrl}/api/health`, {
         method: "GET",
         signal: controller.signal,
         cache: "no-store",
@@ -42,13 +67,75 @@ export async function checkBackendHealth(): Promise<boolean> {
 
 export async function fetchCallSessions(): Promise<CallSessionSummary[]> {
   const baseUrl = getBaseUrl();
-  const res = await fetch(`${baseUrl}/api/calls`, {
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new Error(`Failed to fetch calls: ${res.statusText}`);
+
+  // Fetch active calls and history concurrently
+  const [activeRes, historyRes] = await Promise.allSettled([
+    fetch(`${baseUrl}/api/calls/active`, { cache: "no-store" }),
+    fetch(`${baseUrl}/api/calls`, { cache: "no-store" }),
+  ]);
+
+  const activeCalls: CallSessionSummary[] = [];
+  if (activeRes.status === "fulfilled" && activeRes.value.ok) {
+    try {
+      const activeData = await activeRes.value.json();
+      for (const c of activeData) {
+        activeCalls.push({
+          id: c.call_id || c.id,
+          call_id: c.call_id || c.id,
+          scammer_number: c.scammer_number || c.caller_number || "Unknown Scammer",
+          caller_number: c.caller_number,
+          region: c.region || "Toll Free",
+          country: c.country || "USA",
+          gnome_number: c.gnome_number || "+1 (800) 420-GNOM",
+          gnome_name: c.gnome_name || c.gnome?.name || "Assigned Gnome",
+          started_at:
+            c.started_at ||
+            new Date(Date.now() - (c.elapsed_s || 0) * 1000).toISOString(),
+          ended_at: null,
+          duration_seconds: Math.round(c.elapsed_s || c.duration_seconds || 0),
+          status: "active",
+        });
+      }
+    } catch {
+      // Ignored
+    }
   }
-  return res.json();
+
+  const historyCalls: CallSessionSummary[] = [];
+  if (historyRes.status === "fulfilled" && historyRes.value.ok) {
+    try {
+      const historyData = await historyRes.value.json();
+      for (const c of historyData) {
+        historyCalls.push({
+          id: c.id,
+          scammer_number: c.scammer_number || c.caller_number || "Unknown Scammer",
+          caller_number: c.caller_number,
+          region: c.region || "Toll Free",
+          country: c.country || "USA",
+          gnome_number: c.gnome_number || "+1 (800) 420-GNOM",
+          gnome_name: c.gnome_name || "Assigned Gnome",
+          started_at: c.started_at,
+          ended_at: c.ended_at,
+          duration_seconds: c.duration_seconds || c.duration_s || 0,
+          status: c.status || (c.ended_at ? "ended" : "active"),
+          recording_url: c.has_audio ? `${baseUrl}/api/calls/${c.id}/audio` : c.recording_url || null,
+          recording_status: c.has_audio ? "available" : c.recording_status || "unavailable",
+          has_audio: c.has_audio,
+        });
+      }
+    } catch {
+      // Ignored
+    }
+  }
+
+  // Combine active calls (in front) with history calls, deduplicating by ID
+  const combined = [...activeCalls];
+  for (const h of historyCalls) {
+    if (!combined.some((a) => a.id === h.id)) {
+      combined.push(h);
+    }
+  }
+  return combined;
 }
 
 export async function fetchCallDetail(id: string): Promise<CallSessionDetail> {
@@ -72,7 +159,48 @@ export async function fetchCallDetail(id: string): Promise<CallSessionDetail> {
       cache: "no-store",
     });
     if (res.ok) {
-      return res.json();
+      const data = await res.json();
+      const rawTurns = (data.transcript || data.utterances || []) as Array<Record<string, unknown>>;
+      const mappedTurns: TranscriptTurn[] = rawTurns.map((u, idx: number) => ({
+        // turn_id matches the live socket's ids, so words still streaming in update this line
+        id: (u.turn_id as string) || (u.id as string) || `turn-${(u.seq as number) ?? idx}`,
+        speaker: (u.speaker === "caller" ? "user" : (u.speaker as "user" | "gnome" | "operator")),
+        text: (u.text as string) || "",
+        timestamp: (u.ts as string) || (u.timestamp as string) || new Date().toISOString(),
+        in_call_time: u.in_call_time as string | undefined,
+        state_history: u.state_history as GnomeState[] | undefined,
+        feedback_cue: u.feedback_cue as string | undefined,
+        seq: (u.seq as number) ?? idx,
+        final: (u.final as boolean) ?? true,
+      }));
+
+      const hasAudio = data.has_audio ?? false;
+      const detail: CallSessionDetail = {
+        id: data.id,
+        scammer_number: data.scammer_number || data.caller_number || "Unknown Scammer",
+        region: data.region || "Toll Free",
+        country: data.country || "USA",
+        gnome_number: data.gnome_number || "+1 (800) 420-GNOM",
+        gnome: {
+          name: data.gnome?.name || data.gnome_name || "Assigned Gnome",
+          personality:
+            typeof data.gnome?.personality === "string"
+              ? data.gnome.personality
+              : (data.gnome?.personality?.override ||
+                 data.gnome?.personality?.traits?.join(", ") ||
+                 "Garden gnome counter-scammer"),
+          backstory: data.gnome?.backstory || "Guardian of the lawn and caller of spammers.",
+        },
+        started_at: data.started_at,
+        ended_at: data.ended_at,
+        duration_seconds: data.duration_seconds || data.duration_s || 0,
+        status: data.status || (data.ended_at ? "ended" : "active"),
+        recording_url: hasAudio ? `${baseUrl}/api/calls/${id}/audio` : data.recording_url || null,
+        recording_status: hasAudio ? "available" : data.recording_status || "unavailable",
+        has_audio: hasAudio,
+        transcript: mappedTurns,
+      };
+      return detail;
     }
   } catch {
     // Backend may be offline
@@ -292,26 +420,271 @@ export async function updateGnomeLive(
 
 export async function fetchSettings(): Promise<SystemSettings> {
   const baseUrl = getBaseUrl();
-  const res = await fetch(`${baseUrl}/api/settings`, {
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new Error(`Failed to fetch settings: ${res.statusText}`);
+  const defaultLocal: SystemSettings = {
+    backend_api_url: baseUrl,
+    backend_ws_url: baseUrl.replace(/^http/, "ws"),
+    auto_terminate_seconds: 1800,
+    aggression: 3,
+    max_call_seconds: 1800,
+    default_personality: "",
+    voice_id: null,
+    generate_new_gnome_per_call: true,
+  };
+
+  try {
+    const res = await fetch(`${baseUrl}/api/settings`, {
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const backendSettings = await res.json();
+      return {
+        ...defaultLocal,
+        ...backendSettings,
+        auto_terminate_seconds:
+          backendSettings.max_call_seconds || defaultLocal.auto_terminate_seconds,
+      };
+    }
+  } catch {
+    // Return local defaults
   }
-  return res.json();
+  return defaultLocal;
 }
 
 export async function updateSettings(
   settings: Partial<SystemSettings>
 ): Promise<{ success: boolean }> {
   const baseUrl = getBaseUrl();
-  const res = await fetch(`${baseUrl}/api/settings`, {
+  const backendPatch: Record<string, unknown> = {};
+
+  if (settings.default_personality !== undefined) {
+    backendPatch.default_personality = settings.default_personality;
+  }
+  if (settings.voice_id !== undefined) {
+    backendPatch.voice_id = settings.voice_id;
+  }
+  if (settings.max_call_seconds !== undefined) {
+    backendPatch.max_call_seconds = settings.max_call_seconds;
+  } else if (settings.auto_terminate_seconds !== undefined) {
+    backendPatch.max_call_seconds = settings.auto_terminate_seconds;
+  }
+  if (settings.generate_new_gnome_per_call !== undefined) {
+    backendPatch.generate_new_gnome_per_call = settings.generate_new_gnome_per_call;
+  }
+  if (settings.fixed_gnome !== undefined) {
+    backendPatch.fixed_gnome = settings.fixed_gnome;
+  }
+  if (settings.aggression !== undefined) {
+    backendPatch.aggression = settings.aggression;
+  }
+  if (settings.gnome_mode !== undefined) {
+    backendPatch.gnome_mode = settings.gnome_mode;
+  }
+
+  if (Object.keys(backendPatch).length > 0) {
+    try {
+      const res = await fetch(`${baseUrl}/api/settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(backendPatch),
+      });
+      if (!res.ok) {
+        console.warn(`Failed to update backend settings: ${res.statusText}`);
+      }
+    } catch (e) {
+      console.warn("Could not save settings to backend server:", e);
+    }
+  }
+
+  if (settings.gnome_mode !== undefined) {
+    await setGnomeMode(settings.gnome_mode).catch(() => {});
+  }
+
+  return { success: true };
+}
+
+export async function fetchGnomeMode(): Promise<GnomeMode> {
+  const baseUrl = getBaseUrl();
+  try {
+    const res = await fetch(`${baseUrl}/api/gnome/mode`, { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      return (data.mode as GnomeMode) || "destroyer";
+    }
+  } catch {
+    // Return fallback
+  }
+  return "destroyer";
+}
+
+export async function setGnomeMode(
+  mode: GnomeMode,
+  applyToActive = true
+): Promise<{ ok: boolean; mode: GnomeMode }> {
+  const baseUrl = getBaseUrl();
+  const res = await fetch(`${baseUrl}/api/gnome/mode`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(settings),
+    body: JSON.stringify({ mode, apply_to_active: applyToActive }),
   });
   if (!res.ok) {
-    throw new Error(`Failed to update settings: ${res.statusText}`);
+    throw new Error(`Failed to update gnome mode: ${res.statusText}`);
   }
   return res.json();
 }
+
+export async function pingRest(targetUrl?: string): Promise<PingResult> {
+  const url = (targetUrl || getBaseUrl()).trim().replace(/\/+$/, "");
+  const startTime = Date.now();
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    // Try /api/ping first, fallback to /health or /api/health
+    let res = await fetch(`${url}/api/ping`, {
+      method: "GET",
+      cache: "no-store",
+      signal: controller.signal,
+    }).catch(() => null);
+
+    if (!res || !res.ok) {
+      res = await fetch(`${url}/health`, {
+        method: "GET",
+        cache: "no-store",
+        signal: controller.signal,
+      }).catch(() => null);
+    }
+
+    clearTimeout(timeoutId);
+
+    const latencyMs = Math.max(1, Date.now() - startTime);
+    if (res && res.ok) {
+      return { ok: true, latencyMs, message: `Connected (${latencyMs}ms)` };
+    }
+
+    return {
+      ok: false,
+      latencyMs,
+      message: res ? `HTTP ${res.status} ${res.statusText}` : "No response from server",
+    };
+  } catch (err: unknown) {
+    const latencyMs = Math.max(1, Date.now() - startTime);
+    const msg = err instanceof Error ? err.message : "Failed to reach REST endpoint";
+    return { ok: false, latencyMs, message: msg };
+  }
+}
+
+export async function pingWs(targetWsUrl?: string): Promise<PingResult> {
+  const wsUrl = toWsUrl(targetWsUrl || getWsBaseUrl());
+
+  const pingEndpoint = wsUrl.endsWith("/ws/ping")
+    ? wsUrl
+    : `${wsUrl}/ws/ping`;
+
+  const startTime = Date.now();
+
+  return new Promise<PingResult>((resolve) => {
+    let resolved = false;
+    let ws: WebSocket | null = null;
+
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        try {
+          ws?.close();
+        } catch {}
+        resolve({
+          ok: false,
+          latencyMs: Math.max(1, Date.now() - startTime),
+          message: "WebSocket connection timed out (4s)",
+        });
+      }
+    }, 4000);
+
+    try {
+      ws = new WebSocket(pingEndpoint);
+
+      ws.onopen = () => {
+        try {
+          ws?.send(JSON.stringify({ type: "ping" }));
+        } catch {}
+      };
+
+      ws.onmessage = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timer);
+          const latencyMs = Math.max(1, Date.now() - startTime);
+          try {
+            ws?.close(1000);
+          } catch {}
+          resolve({
+            ok: true,
+            latencyMs,
+            message: `Connected (${latencyMs}ms)`,
+          });
+        }
+      };
+
+      const openGrace = setTimeout(() => {
+        if (!resolved && ws?.readyState === WebSocket.OPEN) {
+          resolved = true;
+          clearTimeout(timer);
+          const latencyMs = Math.max(1, Date.now() - startTime);
+          try {
+            ws?.close(1000);
+          } catch {}
+          resolve({
+            ok: true,
+            latencyMs,
+            message: `Connected (${latencyMs}ms)`,
+          });
+        }
+      }, 600);
+
+      ws.onerror = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timer);
+          clearTimeout(openGrace);
+          const latencyMs = Math.max(1, Date.now() - startTime);
+          resolve({
+            ok: false,
+            latencyMs,
+            message: "Failed to establish WebSocket connection",
+          });
+        }
+      };
+
+      ws.onclose = (event) => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timer);
+          clearTimeout(openGrace);
+          const latencyMs = Math.max(1, Date.now() - startTime);
+          if (event.code === 1000) {
+            resolve({
+              ok: true,
+              latencyMs,
+              message: `Connected (${latencyMs}ms)`,
+            });
+          } else {
+            resolve({
+              ok: false,
+              latencyMs,
+              message: `Closed with code ${event.code}${event.reason ? `: ${event.reason}` : ""}`,
+            });
+          }
+        }
+      };
+    } catch (err: unknown) {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        const latencyMs = Math.max(1, Date.now() - startTime);
+        const msg = err instanceof Error ? err.message : "WebSocket error";
+        resolve({ ok: false, latencyMs, message: msg });
+      }
+    }
+  });
+}
+

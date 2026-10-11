@@ -11,7 +11,16 @@ import numpy as np
 
 from app.core import audio
 from app.core.hub import hub
-from app.models import ActiveSpeaker, GnomeState, Persona, Speaker, Utterance
+from app.models import (
+    ActiveSpeaker,
+    CallDetail,
+    GnomeMode,
+    GnomeOut,
+    GnomeState,
+    Persona,
+    Speaker,
+    Utterance,
+)
 
 SAMPLE_RATE = 8000  # Twilio media streams are 8 kHz mono mu-law
 CALLER_SPEECH_RMS = 500.0  # PCM16 RMS above which we treat a caller frame as speech
@@ -23,6 +32,9 @@ class CallSession:
     call_sid: str | None
     caller_number: str | None
     id: uuid.UUID = field(default_factory=uuid.uuid4)
+    region: str | None = None
+    country: str | None = None
+    gnome_number: str | None = None
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     _started_mono: float = field(default_factory=time.monotonic)
 
@@ -31,6 +43,7 @@ class CallSession:
     persona_ready: asyncio.Event = field(default_factory=asyncio.Event)
     personality_override: str | None = None
     voice_id: str | None = None
+    mode: GnomeMode = "destroyer"  # which system prompt the gnome runs on (switchable mid-call)
 
     # Live edits waiting to be handed to the agent
     operator_notes: asyncio.Queue[str] = field(default_factory=asyncio.Queue)
@@ -43,7 +56,7 @@ class CallSession:
     agent: Any = None  # GnomeAgent, attached once the media stream starts
 
     # Telemetry
-    gnome_state: GnomeState = "idle"
+    gnome_state: GnomeState = "listening"
     gnome_speaking: bool = False
     _last_caller_voice: float = 0.0
 
@@ -99,21 +112,70 @@ class CallSession:
         return {
             "call_id": str(self.id),
             "caller_number": self.caller_number,
+            "scammer_number": self.caller_number,
+            "region": self.region,
+            "country": self.country,
+            "gnome_number": self.gnome_number,
             "started_at": self.started_at.isoformat(),
             "gnome": self.persona.model_dump() if self.persona else None,
             "personality_override": self.personality_override,
             "voice_id": self.voice_id,
+            "gnome_mode": self.mode,
+            "status": "active",
         }
+
+    def to_call_detail(self) -> CallDetail:
+        elapsed_int = int(self.elapsed())
+        gnome_out = None
+        if self.persona:
+            gnome_out = GnomeOut(
+                name=self.persona.name,
+                backstory=self.persona.backstory,
+                personality={
+                    "traits": self.persona.personality_traits,
+                    "quirks": self.persona.speaking_quirks,
+                    "override": self.personality_override,
+                    "voice_id": self.voice_id,
+                    "mode": self.mode,
+                },
+            )
+        return CallDetail(
+            id=self.id,
+            twilio_call_sid=self.call_sid,
+            caller_number=self.caller_number,
+            scammer_number=self.caller_number,
+            region=self.region,
+            country=self.country,
+            gnome_number=self.gnome_number,
+            gnome_name=self.persona.name if self.persona else None,
+            started_at=self.started_at,
+            ended_at=None,
+            duration_s=elapsed_int,
+            duration_seconds=elapsed_int,
+            status="active",
+            end_reason=None,
+            gnome=gnome_out,
+            utterances=list(self.transcript),
+            transcript=list(self.transcript),
+            has_audio=self.has_audio,
+            recording_status="unavailable",
+        )
 
     # ---- transcript ----
 
-    def add_utterance(self, speaker: Speaker, text: str) -> Utterance | None:
+    def add_utterance(
+        self, speaker: Speaker, text: str, turn_id: str | None = None, publish: bool = True
+    ) -> Utterance | None:
+        """Record a finished utterance. publish=False when the caller sends the final event itself later."""
         text = text.strip()
         if not text:
             return None
-        u = Utterance(seq=len(self.transcript), ts=datetime.now(timezone.utc), speaker=speaker, text=text)
+        u = Utterance(
+            seq=len(self.transcript), ts=datetime.now(timezone.utc), speaker=speaker, text=text, turn_id=turn_id
+        )
         self.transcript.append(u)
-        self.publish("transcript", {"speaker": speaker, "text": text, "final": True, "seq": u.seq})
+        if publish:
+            self.publish("transcript", {"speaker": speaker, "text": text, "final": True, "seq": u.seq, "turn_id": turn_id})
         return u
 
     # ---- recording ----

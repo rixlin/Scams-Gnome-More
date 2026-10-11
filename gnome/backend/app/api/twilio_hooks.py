@@ -13,7 +13,18 @@ router = APIRouter(prefix="/twilio", tags=["twilio"])
 
 @router.post("/voice")
 async def incoming_call(form: dict[str, str] = Depends(twilio_form)) -> Response:
-    session = lifecycle.start_call(form.get("CallSid"), form.get("From"))
+    city = form.get("FromCity")
+    state = form.get("FromState")
+    region = f"{city}, {state}" if (city and state) else (city or state or "Toll Free")
+    country = form.get("FromCountry") or "USA"
+    to_number = form.get("To") or get_config().twilio_phone_number
+    session = lifecycle.start_call(
+        form.get("CallSid"),
+        form.get("From"),
+        gnome_number=to_number,
+        region=region,
+        country=country,
+    )
     stream_url = get_config().public_ws_base.rstrip("/") + "/ws/twilio"
     twiml = (
         '<?xml version="1.0" encoding="UTF-8"?>'

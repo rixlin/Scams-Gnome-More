@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { CallSessionSummary } from "../../lib/types";
 import { CallBox } from "./CallBox";
@@ -34,15 +34,9 @@ export const CallSection: React.FC<CallSectionProps> = ({
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(calls.length / PAGE_SIZE));
+  const effectivePage = Math.min(currentPage, totalPages);
 
-  // Reset or clamp currentPage if calls change
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(1);
-    }
-  }, [calls.length, totalPages, currentPage]);
-
-  const startIndex = (currentPage - 1) * PAGE_SIZE;
+  const startIndex = (effectivePage - 1) * PAGE_SIZE;
   const endIndex = startIndex + PAGE_SIZE;
   const paginatedCalls = calls.slice(startIndex, endIndex);
 
@@ -136,7 +130,7 @@ export const CallSection: React.FC<CallSectionProps> = ({
                 <button
                   type="button"
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
+                  disabled={effectivePage === 1}
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:active:scale-100 font-medium text-xs"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
@@ -150,7 +144,7 @@ export const CallSection: React.FC<CallSectionProps> = ({
                       type="button"
                       onClick={() => setCurrentPage(pageNum)}
                       className={`w-7 h-7 rounded-lg text-xs font-mono font-medium transition-all hover:scale-105 active:scale-95 ${
-                        currentPage === pageNum
+                        effectivePage === pageNum
                           ? "bg-emerald-600 text-white font-bold shadow-sm"
                           : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                       }`}
@@ -163,7 +157,7 @@ export const CallSection: React.FC<CallSectionProps> = ({
                 <button
                   type="button"
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
+                  disabled={effectivePage === totalPages}
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:active:scale-100 font-medium text-xs"
                 >
                   <span>Next</span>
