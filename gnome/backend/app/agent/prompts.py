@@ -1,25 +1,53 @@
 """System prompts for the gnome: persona + scam-disruption tactics."""
 
+import random
+
 from app.models import GnomeMode, Persona, Utterance
+
+# Left to itself the model keeps naming every gnome Barnaby or Bartholomew, so the first name is
+# picked here and handed to it.
+GNOME_FIRST_NAMES = [
+    "Alaric", "Ambrose", "Archibald", "Augustin", "Basil", "Benedict", "Bramble", "Cedric",
+    "Clementine", "Cornelius", "Crispin", "Dandelion", "Desmond", "Edwina", "Elowen", "Ephraim",
+    "Ferdinand", "Fennimore", "Fergus", "Florentine", "Gideon", "Gilbert", "Griselda", "Gwendolyn",
+    "Hamish", "Hazel", "Horatio", "Humphrey", "Ignatius", "Isadora", "Jasper", "Jebediah",
+    "Leopold", "Lucius", "Mabel", "Magnus", "Marigold", "Mortimer", "Mungo", "Nettle",
+    "Ottoline", "Percival", "Peregrine", "Philomena", "Pip", "Quentin", "Rosalind", "Rufus",
+    "Seraphina", "Silas", "Tobias", "Tansy", "Thaddeus", "Ulric", "Wilhelmina", "Winifred",
+    "Wendell", "Wolfgang", "Ysolde", "Zebedee", "Fizzwick", "Grumbold", "Knobbin", "Mossimo",
+    "Pockets", "Snodgrass", "Tumbleweed", "Wigglesworth", "Bodkin", "Cobblepot",
+]
+
+
+def random_first_name() -> str:
+    return random.choice(GNOME_FIRST_NAMES)
+
 
 PERSONA_PROMPT = """Invent a brand-new garden gnome character who answers the phone.
 Make them vivid, eccentric and blunt: an absurdly long life, a specific garden they guard,
 petty feuds and a love of riddles. They speak English and talk in short, punchy lines.
+Their first name is {first_name} (unless the operator guidance names them); invent a fitting whimsical surname.
 {guidance}
-Return JSON with: name (a full whimsical name), backstory (4-6 sentences, first person facts
+Return JSON with: name (first name plus surname), backstory (4-6 sentences, first person facts
 the gnome can draw on), personality_traits (3-6 short phrases), speaking_quirks (2-4 short phrases)."""
 
-FALLBACK_PERSONA = Persona(
-    name="Barnaby Thistlewick",
-    backstory=(
-        "Barnaby is a 347-year-old garden gnome from a cottage garden in Dorset. "
-        "He has been locked in a decades-long feud with the neighbour's plastic flamingo, Gerald. "
-        "He keeps his life savings in a mushroom under the rhubarb and is convinced the snails are unionising. "
-        "He once met a hedgehog who claimed to be royalty and has never stopped talking about it."
-    ),
-    personality_traits=["blunt", "obsessed with riddles", "suspicious of flamingos", "warm but baffling"],
-    speaking_quirks=["says 'by my beard'", "answers in as few words as possible"],
-)
+def fallback_persona() -> Persona:
+    first = random_first_name()
+    return Persona(
+        name=f"{first} Thistlewick",
+        backstory=(
+            f"{first} is a 347-year-old garden gnome from a cottage garden in Dorset. "
+            f"{first} has been locked in a decades-long feud with the neighbour's plastic flamingo, Gerald. "
+            "The gnome keeps a life's savings in a mushroom under the rhubarb and is convinced the snails are unionising. "
+            f"{first} once met a hedgehog who claimed to be royalty and has never stopped talking about it."
+        ),
+        personality_traits=["blunt", "obsessed with riddles", "suspicious of flamingos", "warm but baffling"],
+        speaking_quirks=["says 'by my beard'", "answers in as few words as possible"],
+    )
+
+
+# A fixed instance for code (and tests) that needs one stable fallback gnome
+FALLBACK_PERSONA = fallback_persona()
 
 _AGGRESSION = {
     1: "You are talking to a regular person, talk like a whimsical gnome.",
@@ -110,8 +138,9 @@ WHIMSY_PERSONA_PROMPT = """Invent a brand-new garden gnome character who answers
 Make them warm, whimsical and delightfully odd: an absurdly long life, a specific garden they tend,
 beloved creature friends, small daily adventures, gentle feuds and a head full of folk wisdom.
 They speak English and talk in short, lively, spoken sentences.
+Their first name is {first_name} (unless the operator guidance names them); invent a fitting whimsical surname.
 {guidance}
-Return JSON with: name (a full whimsical name), backstory (4-6 sentences, first person facts
+Return JSON with: name (first name plus surname), backstory (4-6 sentences, first person facts
 the gnome can draw on), personality_traits (3-6 short phrases), speaking_quirks (2-4 short phrases)."""
 
 _WHIMSY = """## Who you are
