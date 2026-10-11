@@ -1,11 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
-import { Radio, Clock, Calendar, User, PhoneCall, ShieldAlert, Check, Globe } from "lucide-react";
+import { Radio, Clock, Calendar, User, PhoneCall, ShieldAlert, Check, Globe, Copy } from "lucide-react";
 import { CallSessionSummary } from "../../lib/types";
 import { useCallDuration } from "../../hooks/useCallDuration";
 import { formatDuration, formatCallDateTime, formatRegionWithCountry } from "../../lib/utils";
+import { useNotification } from "../notifications/NotificationProvider";
 
 interface CallBoxProps {
   call: CallSessionSummary;
@@ -22,6 +23,8 @@ export const CallBox: React.FC<CallBoxProps> = ({
   isSelected = false,
   onToggleSelect,
 }) => {
+  const { notify } = useNotification();
+  const [copied, setCopied] = useState(false);
   const elapsedSeconds = useCallDuration(
     call.started_at,
     call.status,
@@ -78,13 +81,30 @@ export const CallBox: React.FC<CallBoxProps> = ({
             </span>
           )}
 
-          {/* Truncated Session ID with full ID hover */}
-          <span
-            className="text-xs font-mono text-zinc-300 hover:text-zinc-100 transition-colors cursor-help px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800/80 truncate"
-            title={call.id}
+          {/* Truncated Session ID with full ID hover & click-to-copy */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              navigator.clipboard.writeText(call.id);
+              setCopied(true);
+              notify.success(
+                "Copied to Clipboard",
+                `Session ID #${call.id} copied.`
+              );
+              setTimeout(() => setCopied(false), 1500);
+            }}
+            className="group/copy inline-flex items-center gap-1 text-xs font-mono text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/50 transition-colors cursor-pointer px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800/80 truncate"
+            title={copied ? "Copied ID to clipboard!" : `Click to copy ID: ${call.id}`}
           >
-            #{call.id.slice(0, 8)}
-          </span>
+            <span>{copied ? "Copied!" : `#${call.id.slice(0, 8)}`}</span>
+            {copied ? (
+              <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+            ) : (
+              <Copy className="w-3 h-3 text-zinc-500 group-hover/copy:text-zinc-300 opacity-60 group-hover/copy:opacity-100 transition-opacity shrink-0" />
+            )}
+          </button>
         </div>
 
         {/* Right-aligned Actions */}

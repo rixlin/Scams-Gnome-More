@@ -14,6 +14,8 @@ import {
   Calendar,
   Globe,
   Trash2,
+  Copy,
+  Check,
 } from "lucide-react";
 import { CallSessionDetail } from "../../lib/types";
 import { useCallDuration } from "../../hooks/useCallDuration";
@@ -36,6 +38,7 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
 }) => {
   const router = useRouter();
   const { notify } = useNotification();
+  const [copied, setCopied] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isClosingConfirm, setIsClosingConfirm] = useState(false);
 
@@ -123,12 +126,27 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
           </Link>
           <div>
             <div className="flex items-center gap-2">
-              <h1
-                className="text-lg font-bold text-zinc-100 font-mono cursor-help"
-                title={call.id}
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(call.id);
+                  setCopied(true);
+                  notify.success(
+                    "Copied to Clipboard",
+                    `Session ID #${call.id} copied.`
+                  );
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="group/copy flex items-center gap-2 text-lg font-bold text-zinc-100 hover:text-emerald-400 font-mono transition-colors cursor-pointer"
+                title={copied ? "Copied ID to clipboard!" : `Click to copy ID: ${call.id}`}
               >
-                Session #{call.id.slice(0, 8)}
-              </h1>
+                <span>Session #{call.id.slice(0, 8)}</span>
+                {copied ? (
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 animate-in fade-in" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5 text-zinc-500 group-hover/copy:text-zinc-300 opacity-60 group-hover/copy:opacity-100 transition-opacity shrink-0" />
+                )}
+              </button>
               {isActive ? (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 animate-pulse">
                   <span className="w-2 h-2 rounded-full bg-emerald-400" />

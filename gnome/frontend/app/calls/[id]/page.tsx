@@ -75,6 +75,7 @@ function CallSessionContent() {
   const {
     transcript,
     isTerminated,
+    currentGnomeState,
   } = useCallTelemetry({
     callId,
     initialTranscript: call?.transcript || EMPTY_TRANSCRIPT,
@@ -192,8 +193,10 @@ function CallSessionContent() {
             <div className="hidden xl:flex xl:w-1/2 h-full min-h-0 flex-col overflow-hidden pb-1">
               <TranscriptFeed
                 callId={call.id}
+                callStartedAt={call.started_at}
                 transcript={transcript.length > 0 ? transcript : call.transcript}
                 gnomeName={call.gnome?.name || "Assigned Gnome"}
+                gnomeState={currentGnomeState}
                 isCallActive={isCallActive}
                 onGnomeUpdated={reloadDetail}
                 className="h-full flex-1 min-h-0"
@@ -231,8 +234,10 @@ function CallSessionContent() {
             >
               <TranscriptFeed
                 callId={call.id}
+                callStartedAt={call.started_at}
                 transcript={transcript.length > 0 ? transcript : call.transcript}
                 gnomeName={call.gnome?.name || "Assigned Gnome"}
+                gnomeState={currentGnomeState}
                 isCallActive={isCallActive}
                 onGnomeUpdated={reloadDetail}
                 onClose={() => setIsMobileDrawerOpen(false)}

@@ -2,25 +2,47 @@
 
 import React, { useRef, useEffect, useState } from "react";
 import { MessageSquare, User, Bot, Terminal, Zap, Send, RefreshCw, X } from "lucide-react";
-import { TranscriptTurn } from "../../lib/types";
+import { TranscriptTurn, GnomeState } from "../../lib/types";
 import { formatStartTime } from "../../lib/utils";
 import { updateGnomeLive } from "../../lib/api";
 
 interface TranscriptFeedProps {
   transcript: TranscriptTurn[];
   gnomeName?: string;
+  gnomeState?: GnomeState;
   isCallActive?: boolean;
   callId?: string;
+  callStartedAt?: string;
   onGnomeUpdated?: () => void;
   onClose?: () => void;
   className?: string;
 }
 
+function getElapsedCallTime(turn: TranscriptTurn, callStartedAt?: string, fallbackBaseMs?: number): string {
+  if (turn.in_call_time) {
+    return turn.in_call_time;
+  }
+  const baseMs = callStartedAt ? new Date(callStartedAt).getTime() : fallbackBaseMs;
+  if (!baseMs || isNaN(baseMs)) {
+    return "+00:00";
+  }
+  const turnMs = new Date(turn.timestamp).getTime();
+  if (isNaN(turnMs)) {
+    return "+00:00";
+  }
+  const diffSec = Math.max(0, Math.floor((turnMs - baseMs) / 1000));
+  const mins = Math.floor(diffSec / 60);
+  const secs = diffSec % 60;
+  return `+${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+}
+
 export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
   transcript,
   gnomeName = "Assigned Gnome",
+  gnomeState = "listening",
   isCallActive = true,
   callId,
+  callStartedAt,
   onGnomeUpdated,
   onClose,
   className = "",
@@ -28,6 +50,7 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const prevCountRef = useRef<number>(0);
+  const fallbackBaseMs = transcript.length > 0 ? new Date(transcript[0].timestamp).getTime() : undefined;
 
   const [feedbackInput, setFeedbackInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -145,11 +168,9 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
                         <span>Operator Feedback Interjection</span>
                       </div>
                       <div className="flex items-center gap-2 text-[10px] text-zinc-400 font-mono">
-                        {turn.in_call_time && (
-                          <span className="bg-indigo-900/60 px-1.5 py-0.5 rounded text-indigo-200">
-                            {turn.in_call_time}
-                          </span>
-                        )}
+                        <span className="bg-indigo-900/60 px-1.5 py-0.5 rounded text-indigo-200">
+                          {getElapsedCallTime(turn, callStartedAt, fallbackBaseMs)}
+                        </span>
                         <span>{formatStartTime(turn.timestamp)}</span>
                       </div>
                     </div>
@@ -199,11 +220,9 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-mono">
-                      {turn.in_call_time && (
-                        <span className="bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded text-zinc-300">
-                          {turn.in_call_time}
-                        </span>
-                      )}
+                      <span className="bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded text-zinc-300">
+                        {getElapsedCallTime(turn, callStartedAt, fallbackBaseMs)}
+                      </span>
                       <span>{formatStartTime(turn.timestamp)}</span>
                     </div>
                   </div>
@@ -232,32 +251,52 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
       {/* Direct Prompt Injection Message Box at the Bottom (Pinned Bottom) */}
       <div className="shrink-0 border-t border-zinc-800 bg-zinc-950/90">
         {isCallActive && callId ? (
-          <form
-            onSubmit={handleSendPrompt}
-            className="p-3 flex items-center gap-2"
-          >
-            <input
-              type="text"
-              value={feedbackInput}
-              onChange={(e) => setFeedbackInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={submitting}
-              placeholder="Direct prompt injection to gnome..."
-              className="flex-1 bg-zinc-900 border border-zinc-800 focus:border-emerald-500/80 rounded-xl px-3.5 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none transition-colors"
-            />
-            <button
-              type="submit"
-              disabled={!feedbackInput.trim() || submitting}
-              className="flex items-center justify-center p-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-all hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:active:scale-100 disabled:opacity-40 disabled:hover:bg-emerald-600 shrink-0"
-              title="Send prompt injection"
+          <div className="p-3 pt-2.5 space-y-2">
+            {/* Current Gnome State Indicator */}
+            <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span>
+                <span
+                  className="text-zinc-200 font-semibold cursor-help"
+                  title={gnomeName}
+                >
+                  {gnomeName}
+                </span>{" "}
+                is{" "}
+                <span className="text-emerald-400 font-semibold lowercase">
+                  {gnomeState}
+                </span>
+                ...
+              </span>
+            </div>
+
+            <form
+              onSubmit={handleSendPrompt}
+              className="flex items-center gap-2"
             >
-              {submitting ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
-            </button>
-          </form>
+              <input
+                type="text"
+                value={feedbackInput}
+                onChange={(e) => setFeedbackInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={submitting}
+                placeholder="Direct prompt injection to gnome..."
+                className="flex-1 bg-zinc-900 border border-zinc-800 focus:border-emerald-500/80 rounded-xl px-3.5 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none transition-colors"
+              />
+              <button
+                type="submit"
+                disabled={!feedbackInput.trim() || submitting}
+                className="flex items-center justify-center p-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-all hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:active:scale-100 disabled:opacity-40 disabled:hover:bg-emerald-600 shrink-0"
+                title="Send prompt injection"
+              >
+                {submitting ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+              </button>
+            </form>
+          </div>
         ) : (
           <div className="py-2.5 px-4 text-center text-xs text-zinc-500 font-mono">
             Call session ended &mdash; Transcript is read-only
