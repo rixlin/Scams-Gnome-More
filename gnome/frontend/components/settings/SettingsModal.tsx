@@ -16,7 +16,7 @@ import {
   Volume2,
   Headphones,
 } from "lucide-react";
-import { fetchSettings, updateSettings, pingRest, pingWs } from "../../lib/api";
+import { fetchSettings, updateSettings, pingRest, pingWs, getBaseUrl, getWsBaseUrl } from "../../lib/api";
 import { CallSessionSummary, AudioPlaybackMode } from "../../lib/types";
 import { createSampleDebugCallDetail } from "../../lib/debug-call-generator";
 import { useTheme } from "../theme/ThemeProvider";
@@ -93,16 +93,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // System Settings state
   const [backendUrl, setBackendUrl] = useState(() => {
     if (typeof window !== "undefined") {
-      return window.localStorage.getItem("gnome_backend_url") || "http://localhost:8000";
+      return window.localStorage.getItem("gnome_backend_url") || getBaseUrl();
     }
-    return "http://localhost:8000";
+    return getBaseUrl();
   });
 
   const [wsUrl, setWsUrl] = useState(() => {
     if (typeof window !== "undefined") {
-      return window.localStorage.getItem("gnome_ws_url") || "ws://localhost:8000";
+      return window.localStorage.getItem("gnome_ws_url") || getWsBaseUrl();
     }
-    return "ws://localhost:8000";
+    return getWsBaseUrl();
   });
 
   const [autoTerminateSeconds, setAutoTerminateSeconds] = useState(1800);
@@ -576,7 +576,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         setBackendUrl(e.target.value);
                         setRestPingState({ status: "idle" });
                       }}
-                      placeholder="http://localhost:8000"
+                      placeholder="https://api.gnomegrove.tech"
                       className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
                     />
                     <button
@@ -631,7 +631,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         setWsUrl(e.target.value);
                         setWsPingState({ status: "idle" });
                       }}
-                      placeholder="ws://localhost:8000"
+                      placeholder="wss://api.gnomegrove.tech"
                       className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
                     />
                     <button

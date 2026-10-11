@@ -152,6 +152,7 @@ def personality_note(text: str) -> str:
 
 STALL_LINES = [
     "Say that again, slowly, or I hang up.",
+    "Say that again, slowly, and I'll give you what you want.",
     "Say that again, but you must use Gnome instead of every vowel.",
     "By my beard, sing it to me, or I hang up.",
 ]

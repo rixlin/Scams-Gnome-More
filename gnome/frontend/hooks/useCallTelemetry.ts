@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { GnomeState, TranscriptTurn } from "../lib/types";
+import { getWsBaseUrl } from "../lib/api";
 
 interface UseCallTelemetryOptions {
   callId: string;
@@ -47,16 +48,7 @@ export function useCallTelemetry({
     activeTurnStateHistoryRef.current = activeTurnStateHistory;
   }, [activeTurnStateHistory]);
 
-  const getWsHost = useCallback(() => {
-    if (wsBaseUrl) return wsBaseUrl;
-    if (typeof window !== "undefined") {
-      const saved = window.localStorage.getItem("gnome_ws_url");
-      if (saved) return saved;
-      const host = window.location.hostname || "localhost";
-      return `ws://${host}:8000`;
-    }
-    return "ws://localhost:8000";
-  }, [wsBaseUrl]);
+  const getWsHost = useCallback(() => wsBaseUrl || getWsBaseUrl(), [wsBaseUrl]);
 
   const normalizeState = useCallback((stateStr: string): GnomeState => {
     if (stateStr === "thinking") return "crafting";

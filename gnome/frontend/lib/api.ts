@@ -8,15 +8,26 @@ import {
   TranscriptTurn,
 } from "./types";
 
-const getBaseUrl = (): string => {
+// Public Cloudflare tunnel hostname of the backend (see gnome/backend/run.py)
+export const DEFAULT_BACKEND_URL = "https://api.gnomegrove.tech";
+
+export const getBaseUrl = (): string => {
   if (typeof window !== "undefined") {
     return (
       process.env.NEXT_PUBLIC_BACKEND_URL ||
       window.localStorage.getItem("gnome_backend_url") ||
-      "http://localhost:8000"
-    );
+      DEFAULT_BACKEND_URL
+    ).replace(/\/+$/, "");
   }
-  return process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+  return (process.env.NEXT_PUBLIC_BACKEND_URL || DEFAULT_BACKEND_URL).replace(/\/+$/, "");
+};
+
+// WebSocket base for /ws/live/{channel}. Falls back to the REST URL with http(s) -> ws(s),
+// so an https backend always gets wss (browsers block ws:// from https pages).
+export const getWsBaseUrl = (): string => {
+  const saved = typeof window !== "undefined" ? window.localStorage.getItem("gnome_ws_url") : null;
+  const ws = saved || process.env.NEXT_PUBLIC_WS_URL || getBaseUrl().replace(/^http/, "ws");
+  return ws.replace(/\/+$/, "");
 };
 
 export async function checkBackendHealth(): Promise<boolean> {
