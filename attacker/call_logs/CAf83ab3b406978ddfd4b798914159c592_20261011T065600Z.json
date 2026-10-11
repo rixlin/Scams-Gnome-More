@@ -1,0 +1,17 @@
+{
+  "call_sid": "CAf83ab3b406978ddfd4b798914159c592",
+  "phone_number": " 18043526626",
+  "difficulty": 1,
+  "start_time": 1791701759.516458,
+  "end_time": 1791701760.2915862,
+  "status": "in-progress",
+  "turns": [
+    {
+      "index": 0,
+      "speaker": "agent",
+      "text": "Hi there, this is Mike from National Verification Services. Uh, I'm calling because we noticed some activity on your account that we just wanna double-check. Do you have a quick second?",
+      "timestamp": 1791701759.516472,
+      "behavior": null
+    }
+  ]
+}
