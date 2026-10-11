@@ -31,6 +31,7 @@ import { createSampleDebugCallDetail } from "../../lib/debug-call-generator";
 import { useTheme } from "../theme/ThemeProvider";
 import { THEME_OPTIONS } from "../../lib/theme";
 import { useNotification } from "../notifications/NotificationProvider";
+import { useHideNumbers } from "../../hooks/useHideNumbers";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -47,7 +48,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isClosing, setIsClosing] = useState(false);
   const [activeTab, setActiveTab] = useState<"frontend" | "system" | "debug">("frontend");
   const [loading, setLoading] = useState(false);
-  const [savedSuccess, setSavedSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Audio Playback Mode state
@@ -57,6 +57,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
     return "stereo";
   });
+
+  const { hideNumbers, setHideNumbers } = useHideNumbers();
 
   const { theme, setTheme, currentOption } = useTheme();
   const [isThemeDropdownOpen, setIsThemeDropdownOpen] = useState(false);
@@ -117,7 +119,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [autoTerminateSeconds, setAutoTerminateSeconds] = useState(1800);
   const [aggression, setAggression] = useState(3);
   const [defaultPersonality, setDefaultPersonality] = useState("");
-  const [voiceId, setVoiceId] = useState("");
   const [generateNewGnome, setGenerateNewGnome] = useState(true);
   const [gnomeMode, setGnomeMode] = useState<GnomeMode>("destroyer");
   const [isUpdatingMode, setIsUpdatingMode] = useState(false);
@@ -185,6 +186,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     );
   };
 
+  const handleToggleHideNumbers = (enabled: boolean) => {
+    setHideNumbers(enabled);
+    notify.success(
+      enabled ? "Numbers Hidden" : "Numbers Visible",
+      enabled
+        ? "Phone numbers across the console are now obfuscated."
+        : "Phone numbers across the console are now visible."
+    );
+  };
+
   // Debug Call Form state
   const [debugScammerNumber, setDebugScammerNumber] = useState("+1 (555) 392-8172");
   const [debugRegion, setDebugRegion] = useState("New York, NY");
@@ -214,9 +225,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }
         if (settings.default_personality !== undefined) {
           setDefaultPersonality(settings.default_personality);
-        }
-        if (settings.voice_id !== undefined) {
-          setVoiceId(settings.voice_id || "");
         }
         if (settings.generate_new_gnome_per_call !== undefined) {
           setGenerateNewGnome(settings.generate_new_gnome_per_call);
@@ -265,13 +273,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleSaveSystemSettings = async () => {
     setLoading(true);
     setErrorMessage(null);
-    setSavedSuccess(false);
 
     try {
       if (typeof window !== "undefined") {
         window.localStorage.setItem("gnome_backend_url", backendUrl);
         window.localStorage.setItem("gnome_ws_url", wsUrl);
         window.localStorage.setItem("gnome_playback_mode", playbackMode);
+        window.localStorage.setItem("gnome_hide_numbers", hideNumbers ? "true" : "false");
         window.dispatchEvent(new Event(BACKEND_URL_CHANGED_EVENT));
       }
 
@@ -282,15 +290,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         max_call_seconds: autoTerminateSeconds,
         aggression,
         default_personality: defaultPersonality,
-        voice_id: voiceId.trim() || null,
         generate_new_gnome_per_call: generateNewGnome,
         gnome_mode: gnomeMode,
       });
 
-      setSavedSuccess(true);
-      setTimeout(() => {
-        setSavedSuccess(false);
-      }, 3000);
+      notify.success(
+        "Server Settings Saved",
+        "Server connection and engine settings updated successfully."
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to save settings.";
       setErrorMessage(msg);
@@ -360,7 +367,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleModalClose = () => {
     setIsClosing(true);
     setTimeout(() => {
-      setSavedSuccess(false);
       setErrorMessage(null);
       setRestPingState({ status: "idle" });
       setWsPingState({ status: "idle" });
@@ -433,7 +439,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }`}
           >
             <Bug className="w-4 h-4" />
-            Debug Tools
+            Debug
           </button>
         </div>
 
@@ -446,13 +452,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {savedSuccess && (
-            <div className="flex items-center gap-2 p-3 text-xs rounded-lg bg-emerald-950/40 border border-emerald-800/60 text-emerald-300">
-              <Check className="w-4 h-4 shrink-0 text-emerald-400" />
-              <span>Settings updated successfully.</span>
-            </div>
-          )}
-
           {/* TAB 1: FRONTEND (APPEARANCE & AUDIO) */}
           {activeTab === "frontend" && (
             <div className="space-y-6">
@@ -461,6 +460,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <h4 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
                   Appearance
                 </h4>
+
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Customize the visual appearance, color palette, and theme of the management console.
+                </p>
 
                 <div className="space-y-2">
                   <label className="block text-xs font-semibold text-zinc-300">
@@ -564,6 +567,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     )}
                   </div>
                 </div>
+
+                {/* Hide All Numbers Toggle */}
+                <div className="pt-1">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/80">
+                    <div>
+                      <label className="text-xs font-semibold text-zinc-200">
+                        Hide All Numbers
+                      </label>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        Obfuscate digits using asterisks, keeping only the country code and last 4 digits.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+                      <input
+                        type="checkbox"
+                        checked={hideNumbers}
+                        onChange={(e) => handleToggleHideNumbers(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500" />
+                    </label>
+                  </div>
+                </div>
               </div>
 
               {/* Recorded Audio Playback Configuration */}
@@ -573,7 +599,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </h4>
 
                 <p className="text-xs text-zinc-400 leading-relaxed">
-                  Select how recorded audio streams from completed sessions are unpacked and played back.
+                  Select how audio streams from call sessions are unpacked and played back.
                 </p>
 
                 <div className="space-y-3 pt-1">
@@ -689,6 +715,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     Test Backend
                   </button>
                 </div>
+
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Configure API and WebSocket endpoints used to communicate with the backend service.
+                </p>
 
                 {/* REST URL + Ping */}
                 <div>
@@ -807,6 +837,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   Engine Parameters
                 </h4>
 
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Tune counter-scamming AI behavior, aggression levels, and call handling limits.
+                </p>
+
                 {/* Aggression Slider */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -845,20 +879,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 {/* Dynamic Gnome Generation Toggle */}
                 <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/80">
-                  <div>
-                    <span className="block text-xs font-medium text-zinc-200">
-                      Dynamic Gnome Generation
-                    </span>
-                    <span className="block text-[11px] text-zinc-400">
-                      Synthesizes a distinct backstory and quirk profile per inbound call
+                  <div className="pr-4">
+                    <div className="flex items-center gap-2">
+                      <span className="block text-xs font-medium text-zinc-200">
+                        Dynamic Gnome Generation
+                      </span>
+                      <span
+                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                          generateNewGnome
+                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 font-semibold"
+                            : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
+                        }`}
+                      >
+                        {generateNewGnome ? "Enabled" : "Disabled"}
+                      </span>
+                    </div>
+                    <span className="block text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
+                      When enabled, a distinct backstory and profile will be synthesized for each inbound call.
                     </span>
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={generateNewGnome}
-                    onChange={(e) => setGenerateNewGnome(e.target.checked)}
-                    className="w-4 h-4 rounded accent-emerald-500 cursor-pointer"
-                  />
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={generateNewGnome}
+                      onChange={(e) => setGenerateNewGnome(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500" />
+                  </label>
                 </div>
 
                 {/* Whimsy Mode Toggle */}
@@ -872,7 +920,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
                           gnomeMode === "whimsy"
                             ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 font-semibold"
-                            : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                            : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
                         }`}
                       >
                         {gnomeMode === "whimsy" ? "Enabled (Friendly)" : "Disabled (Aggressive)"}
@@ -908,34 +956,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-300 mb-1">
-                      ElevenLabs Voice ID
-                    </label>
-                    <input
-                      type="text"
-                      value={voiceId}
-                      onChange={(e) => setVoiceId(e.target.value)}
-                      placeholder="e.g. pFZP5JQG7iQjIQuC4Bku"
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-300 mb-1">
-                      Max Call Duration (Seconds)
-                    </label>
-                    <input
-                      type="number"
-                      min={30}
-                      max={7200}
-                      value={autoTerminateSeconds}
-                      onChange={(e) => setAutoTerminateSeconds(Number(e.target.value))}
-                      placeholder="1800"
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">
+                    Max Call Duration (Seconds)
+                  </label>
+                  <input
+                    type="number"
+                    min={30}
+                    max={7200}
+                    value={autoTerminateSeconds}
+                    onChange={(e) => setAutoTerminateSeconds(Number(e.target.value))}
+                    placeholder="1800"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/80"
+                  />
                 </div>
               </div>
 
@@ -966,7 +999,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </h4>
 
                 <p className="text-xs text-zinc-400 leading-relaxed">
-                  Manually injects an active call session to preview call functionality.
+                  Injects a simulated active call session to preview call functionality. Local only.
                 </p>
 
                 <div className="space-y-3 pt-1">
@@ -992,7 +1025,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   <div>
                     <label className="block text-xs font-medium text-zinc-300 mb-1">
-                      Region
+                      Scammer&apos;s Region
                     </label>
                     <input
                       type="text"
@@ -1006,7 +1039,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   <div>
                     <label className="block text-xs font-medium text-zinc-300 mb-1">
-                      Country (ISO-3)
+                      Scammer&apos;s Country (ISO-3)
                     </label>
                     <input
                       type="text"
@@ -1022,7 +1055,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-zinc-300 mb-1">
-                      Gnome&apos;s Virtual Number
+                      Gnome&apos;s Number
                     </label>
                     <input
                       type="text"
@@ -1055,7 +1088,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-all hover:scale-105 active:scale-95"
                   >
                     <PlusCircle className="w-4 h-4" />
-                    Add Active Call Session (Preview)
+                    Add Simulated Call Session
                   </button>
                 </div>
                 </form>

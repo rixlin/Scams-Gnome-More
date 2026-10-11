@@ -21,6 +21,7 @@ import { CallSessionDetail } from "../../lib/types";
 import { useCallDuration } from "../../hooks/useCallDuration";
 import { formatDuration, formatCallDateTime, formatRegionWithCountry } from "../../lib/utils";
 import { useNotification } from "../notifications/NotificationProvider";
+import { useHideNumbers } from "../../hooks/useHideNumbers";
 import { deleteCall } from "../../lib/api";
 
 interface SessionHeaderProps {
@@ -38,6 +39,7 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
 }) => {
   const router = useRouter();
   const { notify } = useNotification();
+  const { formatNumber } = useHideNumbers();
   const [copied, setCopied] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isClosingConfirm, setIsClosingConfirm] = useState(false);
@@ -79,7 +81,7 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
         await onTerminate("operator_manual_kill");
         notify.error(
           "Call Terminated",
-          `Disconnected active phone line with scammer ${call.scammer_number}.`
+          `Disconnected active phone line with scammer ${formatNumber(call.scammer_number)}.`
         );
       } catch {
         // Handled in caller
@@ -270,7 +272,7 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
             <p className="text-xs text-zinc-300 leading-relaxed">
               Are you sure you want to permanently delete this call record with scammer{" "}
               <span className="font-mono font-semibold text-zinc-100">
-                {call.scammer_number}
+                {formatNumber(call.scammer_number)}
               </span>
               ? This action cannot be undone and will permanently remove audio recordings and transcripts.
             </p>
@@ -303,7 +305,7 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
             Scammer&apos;s Number
           </div>
           <div className="text-sm font-bold text-zinc-100 font-mono">
-            {call.scammer_number}
+            {formatNumber(call.scammer_number)}
           </div>
         </div>
 
@@ -313,20 +315,20 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
             Gnome&apos;s Number
           </div>
           <div className="text-sm font-bold text-blue-300 font-mono">
-            {call.gnome_number}
+            {formatNumber(call.gnome_number)}
           </div>
         </div>
 
         <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/80">
           <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500 flex items-center gap-1.5 mb-1">
             <User className="w-3.5 h-3.5 text-emerald-400" />
-            Assigned Gnome
+            Gnome Assigned
           </div>
           <div
             className="text-sm font-bold text-emerald-300 truncate cursor-help"
-            title={call.gnome?.name || "Assigned Gnome"}
+            title={call.gnome?.name || "Gnome Assigned"}
           >
-            {call.gnome?.name || "Assigned Gnome"}
+            {call.gnome?.name || "Gnome Assigned"}
           </div>
         </div>
       </div>

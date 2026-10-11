@@ -7,6 +7,7 @@ import { CallSessionSummary } from "../../lib/types";
 import { useCallDuration } from "../../hooks/useCallDuration";
 import { formatDuration, formatCallDateTime, formatRegionWithCountry } from "../../lib/utils";
 import { useNotification } from "../notifications/NotificationProvider";
+import { useHideNumbers } from "../../hooks/useHideNumbers";
 
 interface CallBoxProps {
   call: CallSessionSummary;
@@ -24,6 +25,7 @@ export const CallBox: React.FC<CallBoxProps> = ({
   onToggleSelect,
 }) => {
   const { notify } = useNotification();
+  const { formatNumber } = useHideNumbers();
   const [copied, setCopied] = useState(false);
   const elapsedSeconds = useCallDuration(
     call.started_at,
@@ -134,7 +136,7 @@ export const CallBox: React.FC<CallBoxProps> = ({
             Scammer&apos;s Number
           </div>
           <div className="text-base font-bold text-zinc-100 font-mono">
-            {call.scammer_number}
+            {formatNumber(call.scammer_number)}
           </div>
           {/* Region moved under scammer number with Globe icon */}
           <div
@@ -167,7 +169,7 @@ export const CallBox: React.FC<CallBoxProps> = ({
               Gnome&apos;s Number
             </div>
             <div className="text-sm font-bold font-mono text-zinc-300 truncate">
-              {call.gnome_number}
+              {formatNumber(call.gnome_number)}
             </div>
           </div>
         </div>

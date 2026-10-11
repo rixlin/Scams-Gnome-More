@@ -78,7 +78,6 @@ export interface LiveGnomeUpdateRequest {
   personality?: string;
   feedback?: string;
   instruction?: string;
-  voice_id?: string;
 }
 
 export type GnomeMode = "destroyer" | "whimsy";
@@ -89,7 +88,6 @@ export interface SystemSettings {
   auto_terminate_seconds: number;
   // Backend AI engine settings
   default_personality?: string;
-  voice_id?: string | null;
   max_call_seconds?: number;
   generate_new_gnome_per_call?: boolean;
   fixed_gnome?: Record<string, unknown> | null;

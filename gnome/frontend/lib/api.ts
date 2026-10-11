@@ -427,7 +427,6 @@ export async function fetchSettings(): Promise<SystemSettings> {
     aggression: 3,
     max_call_seconds: 1800,
     default_personality: "",
-    voice_id: null,
     generate_new_gnome_per_call: true,
   };
 
@@ -458,9 +457,6 @@ export async function updateSettings(
 
   if (settings.default_personality !== undefined) {
     backendPatch.default_personality = settings.default_personality;
-  }
-  if (settings.voice_id !== undefined) {
-    backendPatch.voice_id = settings.voice_id;
   }
   if (settings.max_call_seconds !== undefined) {
     backendPatch.max_call_seconds = settings.max_call_seconds;

@@ -208,7 +208,7 @@ function CallSessionContent() {
               </div>
 
               {/* Bottom fade overlay easing into background (main scrollable section only) */}
-              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-canvas to-transparent z-10" />
+              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-4 bg-gradient-to-t from-canvas to-transparent z-10" />
             </div>
 
             {/* Right Half on Desktop: Pinned fixed window height, full flex-1 height */}

@@ -211,3 +211,78 @@ export function formatRegionWithCountry(call: {
   return `${rawRegion}, ${alpha3}`;
 }
 
+/**
+ * Obfuscates all digits in a phone number using asterisks (*),
+ * except for the country code and the last 4 digits.
+ * Formatting characters, symbols, and letters are preserved untouched.
+ */
+export function obfuscatePhoneNumber(raw?: string | null): string {
+  if (!raw || typeof raw !== "string") return "";
+
+  const trimmed = raw.trim();
+  const digitIndices: number[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    if (/\d/.test(raw[i])) {
+      digitIndices.push(i);
+    }
+  }
+
+  const totalDigits = digitIndices.length;
+  if (totalDigits <= 4) {
+    return raw;
+  }
+
+  // Determine country code digit count
+  let countryCodeCount = 0;
+  if (trimmed.startsWith("+")) {
+    const delimMatch = trimmed.match(/^\+(\d{1,3})(?=[\s\-().]|\b)/);
+    if (delimMatch) {
+      countryCodeCount = delimMatch[1].length;
+    } else {
+      const rawDigits = trimmed.replace(/\D/g, "");
+      if (rawDigits.startsWith("1") || rawDigits.startsWith("7")) {
+        countryCodeCount = 1;
+      } else {
+        countryCodeCount = 2;
+      }
+    }
+  } else {
+    const noPlusMatch = trimmed.match(/^1(?=[\s\-().])/);
+    if (noPlusMatch && trimmed.replace(/\D/g, "").length >= 11) {
+      countryCodeCount = 1;
+    }
+  }
+
+  // If there are no middle digits to obfuscate, return original
+  if (totalDigits <= countryCodeCount + 4) {
+    return raw;
+  }
+
+  // Digits to keep: first `countryCodeCount` digits, and last 4 digits
+  // Digits to obfuscate: indices from `countryCodeCount` up to `totalDigits - 5`
+  const obfuscateSet = new Set<number>();
+  for (let r = countryCodeCount; r < totalDigits - 4; r++) {
+    obfuscateSet.add(digitIndices[r]);
+  }
+
+  let result = "";
+  for (let i = 0; i < raw.length; i++) {
+    if (obfuscateSet.has(i)) {
+      result += "*";
+    } else {
+      result += raw[i];
+    }
+  }
+
+  return result;
+}
+
+export function formatNumberDisplay(
+  raw?: string | null,
+  hideNumbers: boolean = false
+): string {
+  if (!raw) return "";
+  if (!hideNumbers) return raw;
+  return obfuscatePhoneNumber(raw);
+}
+
