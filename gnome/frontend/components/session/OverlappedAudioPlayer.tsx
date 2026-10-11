@@ -200,6 +200,23 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
     return () => clearInterval(timer);
   }, [isEnded, isRecordingUnavailable, isRecordedPlaying, recordedDuration, call?.recording_url, playbackMode, unpackedAudio]);
 
+  // With cacheComponents, navigating away hides this page instead of unmounting it, so the
+  // <audio> elements stay alive. Effect cleanups still run on hide, so pause playback here.
+  // Elements are tracked in a Set (not the DOM refs) since React may detach refs before cleanup.
+  const playedAudioElsRef = useRef<Set<HTMLAudioElement>>(new Set());
+  const trackPlayedAudio = (e: React.SyntheticEvent<HTMLAudioElement>) => {
+    playedAudioElsRef.current.add(e.currentTarget);
+  };
+
+  useEffect(() => {
+    const playedAudioEls = playedAudioElsRef.current;
+    return () => {
+      playedAudioEls.forEach((el) => el.pause());
+      playedAudioEls.clear();
+      setIsRecordedPlaying(false);
+    };
+  }, []);
+
   const updateAudioVolumeAndMute = (vol: number, muted: boolean) => {
     if (playbackMode === "mono" && unpackedAudio) {
       if (callerAudioRef.current) {
@@ -369,12 +386,14 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
                   el.currentTime = recordedCurrentTime;
                   if (!isNaN(el.duration) && el.duration > 0) setRecordedDuration(el.duration);
                 }}
+                onPlay={trackPlayedAudio}
                 onTimeUpdate={handleMonoTimeUpdate}
                 onEnded={handleMonoEnded}
               />
               <audio
                 ref={gnomeAudioRef}
                 src={unpackedAudio.gnomeBlobUrl}
+                onPlay={trackPlayedAudio}
                 onLoadedMetadata={(e) => {
                   const el = e.target as HTMLAudioElement;
                   el.volume = isRecordedMuted ? 0 : recordedVolume;
@@ -387,6 +406,7 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
             <audio
               ref={audioElRef}
               src={call.recording_url}
+              onPlay={trackPlayedAudio}
               onTimeUpdate={(e) => setRecordedCurrentTime((e.target as HTMLAudioElement).currentTime)}
               onLoadedMetadata={(e) => {
                 const dur = (e.target as HTMLAudioElement).duration;
