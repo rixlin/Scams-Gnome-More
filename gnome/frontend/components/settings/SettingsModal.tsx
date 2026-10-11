@@ -14,7 +14,6 @@ import {
   ChevronDown,
   Activity,
   Volume2,
-  Headphones,
 } from "lucide-react";
 import {
   fetchSettings,
@@ -44,7 +43,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const { notify } = useNotification();
   const [isClosing, setIsClosing] = useState(false);
-  const [activeTab, setActiveTab] = useState<"appearance" | "system" | "audio" | "debug">("appearance");
+  const [activeTab, setActiveTab] = useState<"frontend" | "system" | "debug">("frontend");
   const [loading, setLoading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -177,7 +176,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     notify.success(
       "Audio Setting Updated",
       `Recorded audio playback mode set to ${
-        mode === "stereo" ? "Stereo (2-Channel)" : "Mono (Dual Simultaneous Streams)"
+        mode === "stereo" ? "Stereo (2-Channel)" : "Mono (1-Channel)"
       }.`
     );
   };
@@ -368,15 +367,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Tab Navigation */}
         <div className="flex border-b border-zinc-800 bg-zinc-950/30 px-6 gap-6">
           <button
-            onClick={() => setActiveTab("appearance")}
+            onClick={() => setActiveTab("frontend")}
             className={`py-3 text-xs font-semibold border-b-2 flex items-center gap-2 transition-all hover:scale-105 active:scale-95 ${
-              activeTab === "appearance"
+              activeTab === "frontend"
                 ? "border-emerald-500 text-emerald-400"
                 : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
             <Palette className="w-4 h-4" />
-            Appearance
+            Frontend
           </button>
           <button
             onClick={() => setActiveTab("system")}
@@ -388,17 +387,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           >
             <Server className="w-4 h-4" />
             Backend
-          </button>
-          <button
-            onClick={() => setActiveTab("audio")}
-            className={`py-3 text-xs font-semibold border-b-2 flex items-center gap-2 transition-all hover:scale-105 active:scale-95 ${
-              activeTab === "audio"
-                ? "border-emerald-500 text-emerald-400"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Headphones className="w-4 h-4" />
-            Audio
           </button>
           <button
             onClick={() => setActiveTab("debug")}
@@ -429,109 +417,215 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 1: APPEARANCE (DROPDOWN MENU) */}
-          {activeTab === "appearance" && (
-            <div className="space-y-4">
-              <div className="space-y-2" ref={themeDropdownRef}>
-                <label className="block text-xs font-semibold text-zinc-300">
-                  Theme
-                </label>
+          {/* TAB 1: FRONTEND (APPEARANCE & AUDIO) */}
+          {activeTab === "frontend" && (
+            <div className="space-y-6">
+              {/* Appearance / Theme Settings */}
+              <div className="space-y-3" ref={themeDropdownRef}>
+                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                  Appearance
+                </h4>
 
-                {/* Dropdown Menu Container */}
-                <div className="relative">
-                  {/* Dropdown Trigger */}
-                  <button
-                    type="button"
-                    onClick={toggleThemeDropdown}
-                    className="w-full bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded-xl px-4 py-3 flex items-center justify-between text-xs text-zinc-100 transition-all hover:scale-105 active:scale-95 focus:outline-none focus:border-emerald-500/80"
-                  >
-                    {/* Left: Theme Name + Badge */}
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-zinc-100 text-sm">
-                        {currentOption.name}
-                      </span>
-                      {currentOption.badge && (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                          {currentOption.badge}
-                        </span>
-                      )}
-                    </div>
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-zinc-300">
+                    Theme
+                  </label>
 
-                    {/* Right: Swatches + Chevron */}
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-1.5">
-                        {currentOption.swatches.map((color, idx) => (
-                          <span
-                            key={idx}
-                            className="w-4 h-4 rounded border border-white/25 shadow-xs shrink-0"
-                            style={{ backgroundColor: color }}
-                          />
-                        ))}
-                      </div>
-                      <ChevronDown
-                        className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${
-                          isThemeDropdownOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </div>
-                  </button>
-
-                  {/* Dropdown Options List */}
-                  {(isThemeDropdownOpen || isDropdownClosing) && (
-                    <div
-                      className={`absolute top-full left-0 right-0 mt-1.5 z-40 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden py-1 divide-y divide-zinc-900 ${
-                        isDropdownClosing
-                          ? "animate-dropdown-zoom-out"
-                          : "animate-dropdown-zoom"
-                      }`}
+                  {/* Dropdown Menu Container */}
+                  <div className="relative">
+                    {/* Dropdown Trigger */}
+                    <button
+                      type="button"
+                      onClick={toggleThemeDropdown}
+                      className="w-full bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded-xl px-4 py-3 flex items-center justify-between text-xs text-zinc-100 transition-all hover:scale-105 active:scale-95 focus:outline-none focus:border-emerald-500/80"
                     >
-                      {THEME_OPTIONS.map((opt) => {
-                        const isSelected = theme === opt.id;
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => {
-                              setTheme(opt.id);
-                              closeThemeDropdown();
-                            }}
-                            className={`w-full px-4 py-3 flex items-center justify-between text-xs transition-colors hover:bg-zinc-900 text-left ${
-                              isSelected
-                                ? "bg-zinc-900/80 text-emerald-400 font-semibold"
-                                : "text-zinc-200"
-                            }`}
-                          >
-                            {/* Left: Theme Name + Badge */}
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={`text-sm ${
-                                  isSelected ? "text-emerald-400 font-bold" : "text-zinc-200"
-                                }`}
-                              >
-                                {opt.name}
-                              </span>
-                              {opt.badge && (
-                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60">
-                                  {opt.badge}
-                                </span>
-                              )}
-                            </div>
+                      {/* Left: Theme Name + Badge */}
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-zinc-100 text-sm">
+                          {currentOption.name}
+                        </span>
+                        {currentOption.badge && (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                            {currentOption.badge}
+                          </span>
+                        )}
+                      </div>
 
-                            {/* Right: Swatches */}
-                            <div className="flex items-center gap-1.5">
-                              {opt.swatches.map((color, idx) => (
+                      {/* Right: Swatches + Chevron */}
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5">
+                          {currentOption.swatches.map((color, idx) => (
+                            <span
+                              key={idx}
+                              className="w-4 h-4 rounded border border-white/25 shadow-xs shrink-0"
+                              style={{ backgroundColor: color }}
+                            />
+                          ))}
+                        </div>
+                        <ChevronDown
+                          className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${
+                            isThemeDropdownOpen ? "rotate-180" : ""
+                          }`}
+                        />
+                      </div>
+                    </button>
+
+                    {/* Dropdown Options List */}
+                    {(isThemeDropdownOpen || isDropdownClosing) && (
+                      <div
+                        className={`absolute top-full left-0 right-0 mt-1.5 z-40 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden py-1 divide-y divide-zinc-900 ${
+                          isDropdownClosing
+                            ? "animate-dropdown-zoom-out"
+                            : "animate-dropdown-zoom"
+                        }`}
+                      >
+                        {THEME_OPTIONS.map((opt) => {
+                          const isSelected = theme === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => {
+                                setTheme(opt.id);
+                                closeThemeDropdown();
+                              }}
+                              className={`w-full px-4 py-3 flex items-center justify-between text-xs transition-colors hover:bg-zinc-900 text-left ${
+                                isSelected
+                                  ? "bg-zinc-900/80 text-emerald-400 font-semibold"
+                                  : "text-zinc-200"
+                              }`}
+                            >
+                              {/* Left: Theme Name + Badge */}
+                              <div className="flex items-center gap-2">
                                 <span
-                                  key={idx}
-                                  className="w-4 h-4 rounded border border-white/25 shadow-xs shrink-0"
-                                  style={{ backgroundColor: color }}
-                                />
-                              ))}
-                            </div>
-                          </button>
-                        );
-                      })}
+                                  className={`text-sm ${
+                                    isSelected ? "text-emerald-400 font-bold" : "text-zinc-200"
+                                  }`}
+                                >
+                                  {opt.name}
+                                </span>
+                                {opt.badge && (
+                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60">
+                                    {opt.badge}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Right: Swatches */}
+                              <div className="flex items-center gap-1.5">
+                                {opt.swatches.map((color, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="w-4 h-4 rounded border border-white/25 shadow-xs shrink-0"
+                                    style={{ backgroundColor: color }}
+                                  />
+                                ))}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Recorded Audio Playback Configuration */}
+              <div className="space-y-3 pt-3 border-t border-zinc-800/80">
+                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                  Audio Playback
+                </h4>
+
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Select how recorded audio streams from completed sessions are unpacked and played back.
+                </p>
+
+                <div className="space-y-3 pt-1">
+                  <label className="block text-xs font-semibold text-zinc-300">
+                    Playback Mode
+                  </label>
+
+                  {/* Option 1: Stereo */}
+                  <div
+                    onClick={() => handlePlaybackModeChange("stereo")}
+                    className={`p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] ${
+                      playbackMode === "stereo"
+                        ? "bg-emerald-950/20 border-emerald-500/80 shadow-xs"
+                        : "bg-zinc-950/60 border-zinc-800/80 hover:border-zinc-700"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`w-4 h-4 rounded-full mt-0.5 border flex items-center justify-center shrink-0 ${
+                            playbackMode === "stereo"
+                              ? "border-emerald-500 bg-emerald-500"
+                              : "border-zinc-600 bg-transparent"
+                          }`}
+                        >
+                          {playbackMode === "stereo" && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-zinc-950" />
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-zinc-100">
+                              Stereo (2-Channel)
+                            </span>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                              Default
+                            </span>
+                          </div>
+                          <p className="text-xs text-zinc-400 leading-relaxed">
+                            Plays call audio in a modern 2-channel stereo configuration. Audio is played as is: the caller audio is routed to the left channel, while the gnome audio is routed to the right channel. Ideal for headphones.
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  )}
+                  </div>
+
+                  {/* Option 2: Mono */}
+                  <div
+                    onClick={() => handlePlaybackModeChange("mono")}
+                    className={`p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] ${
+                      playbackMode === "mono"
+                        ? "bg-emerald-950/20 border-emerald-500/80 shadow-xs"
+                        : "bg-zinc-950/60 border-zinc-800/80 hover:border-zinc-700"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`w-4 h-4 rounded-full mt-0.5 border flex items-center justify-center shrink-0 ${
+                            playbackMode === "mono"
+                              ? "border-emerald-500 bg-emerald-500"
+                              : "border-zinc-600 bg-transparent"
+                          }`}
+                        >
+                          {playbackMode === "mono" && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-zinc-950" />
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-zinc-100">
+                              Mono (1-Channel)
+                            </span>
+                          </div>
+                          <p className="text-xs text-zinc-400 leading-relaxed">
+                            Plays call audio in a traditional 1-channel mono configuration. Audio is unpacked: both caller and gnome audio are played on the same channel.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-zinc-950/40 border border-zinc-800/60 flex items-center gap-3 mt-2">
+                  <Volume2 className="w-4 h-4 text-zinc-400 shrink-0" />
+                  <span className="text-[11px] text-zinc-400 leading-relaxed">
+                    Current playback mode: <span className="font-semibold text-zinc-200 capitalize">{playbackMode}</span>. Changes take effect on subsequent playback starts.
+                  </span>
                 </div>
               </div>
             </div>
@@ -673,8 +767,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* AI & Engine Parameters */}
               <div className="space-y-3 pt-2 border-t border-zinc-800/80">
-                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400">
-                  Gnome Engine Parameters
+                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                  Engine Parameters
                 </h4>
 
                 {/* Aggression Slider */}
@@ -794,122 +888,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 3: AUDIO SETTINGS */}
-          {activeTab === "audio" && (
-            <div className="space-y-5">
-              <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800/80 space-y-1">
-                <h4 className="text-xs font-bold text-zinc-100 flex items-center gap-2">
-                  <Headphones className="w-4 h-4 text-emerald-400" />
-                  Recorded Audio Playback Configuration
-                </h4>
-                <p className="text-xs text-zinc-400 leading-relaxed">
-                  Select how recorded audio streams from completed sessions are unpacked and played back.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <label className="block text-xs font-semibold text-zinc-300">
-                  Playback Mode
-                </label>
-
-                {/* Option 1: Stereo */}
-                <div
-                  onClick={() => handlePlaybackModeChange("stereo")}
-                  className={`p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] ${
-                    playbackMode === "stereo"
-                      ? "bg-emerald-950/20 border-emerald-500/80 shadow-xs"
-                      : "bg-zinc-950/60 border-zinc-800/80 hover:border-zinc-700"
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={`w-4 h-4 rounded-full mt-0.5 border flex items-center justify-center shrink-0 ${
-                          playbackMode === "stereo"
-                            ? "border-emerald-500 bg-emerald-500"
-                            : "border-zinc-600 bg-transparent"
-                        }`}
-                      >
-                        {playbackMode === "stereo" && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-zinc-950" />
-                        )}
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-zinc-100">
-                            Stereo Playback
-                          </span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                            Standard
-                          </span>
-                        </div>
-                        <p className="text-xs text-zinc-400 leading-relaxed">
-                          Plays recorded audio as a standard 2-channel stereo WAV file. The caller (scammer) audio is routed to the left channel, and the gnome dialogue is routed to the right channel. Ideal for headphone wiretap monitoring.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Option 2: Mono */}
-                <div
-                  onClick={() => handlePlaybackModeChange("mono")}
-                  className={`p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] ${
-                    playbackMode === "mono"
-                      ? "bg-emerald-950/20 border-emerald-500/80 shadow-xs"
-                      : "bg-zinc-950/60 border-zinc-800/80 hover:border-zinc-700"
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={`w-4 h-4 rounded-full mt-0.5 border flex items-center justify-center shrink-0 ${
-                          playbackMode === "mono"
-                            ? "border-emerald-500 bg-emerald-500"
-                            : "border-zinc-600 bg-transparent"
-                        }`}
-                      >
-                        {playbackMode === "mono" && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-zinc-950" />
-                        )}
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-zinc-100">
-                            Mono Playback (Simultaneous Dual Streams)
-                          </span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-teal-500/15 text-teal-400 border border-teal-500/30">
-                            Unpacked
-                          </span>
-                        </div>
-                        <p className="text-xs text-zinc-400 leading-relaxed">
-                          Unpacks the 2-channel stereo WAV received from the backend into two synchronized mono audio streams (caller and gnome) that are played simultaneously. Controls remain unified on a single timeline bar.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-zinc-950/40 border border-zinc-800/60 flex items-center gap-3">
-                <Volume2 className="w-4 h-4 text-zinc-400 shrink-0" />
-                <span className="text-[11px] text-zinc-400 leading-relaxed">
-                  Active playback mode: <span className="font-semibold text-zinc-200 capitalize">{playbackMode}</span>. Changes take effect on subsequent playback starts.
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 4: DEBUG TOOLS */}
+          {/* TAB 3: DEBUG TOOLS */}
           {activeTab === "debug" && (
-            <div className="space-y-4">
-              <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800/80">
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                  Call Simulation
+                </h4>
+
                 <p className="text-xs text-zinc-400 leading-relaxed">
                   Manually injects an active call session to preview call functionality.
                 </p>
-              </div>
 
-              <form onSubmit={handleCreateDebugCall} className="space-y-3">
+                <div className="space-y-3 pt-1">
+                  <label className="block text-xs font-semibold text-zinc-300">
+                    Session Injection
+                  </label>
+
+                  <form onSubmit={handleCreateDebugCall} className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-zinc-300 mb-1">
@@ -993,9 +989,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     Add Active Call Session (Preview)
                   </button>
                 </div>
-              </form>
+                </form>
+              </div>
             </div>
-          )}
+          </div>
+        )}
         </div>
 
         {/* Footer */}

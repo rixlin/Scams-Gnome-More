@@ -184,7 +184,12 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
                       {isGnome ? (
                         <>
                           <Bot className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                          <span className="text-emerald-500 font-bold">{gnomeName}</span>
+                          <span
+                            className="text-emerald-500 font-bold cursor-help"
+                            title={gnomeName}
+                          >
+                            {gnomeName}
+                          </span>
                         </>
                       ) : (
                         <>

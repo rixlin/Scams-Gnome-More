@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback, Suspense } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { CallSessionDetail, CallSessionSummary, TranscriptTurn } from "../../../lib/types";
-import { fetchCallDetail, terminateCall } from "../../../lib/api";
+import { fetchCallDetail, terminateCall, deleteCall } from "../../../lib/api";
 import { SessionHeader } from "../../../components/session/SessionHeader";
 import { OverlappedAudioPlayer } from "../../../components/session/OverlappedAudioPlayer";
 import { TranscriptFeed } from "../../../components/session/TranscriptFeed";
@@ -104,6 +104,12 @@ function CallSessionContent() {
     }
   };
 
+  const handleDeleteCall = async () => {
+    if (!callId) return;
+    await deleteCall(callId);
+    router.push("/");
+  };
+
   const handleAddDebugCall = (newCall: CallSessionSummary) => {
     if (typeof window !== "undefined") {
       try {
@@ -150,29 +156,36 @@ function CallSessionContent() {
 
         {call && (
           <div className="flex-1 min-h-0 flex flex-col xl:flex-row gap-6 relative overflow-hidden">
-            {/* Left Half: Scrollable column on Desktop, full height scroll */}
-            <div className="w-full xl:w-1/2 flex flex-col space-y-4 overflow-y-auto min-h-0 h-full pr-1 sm:pr-2 pb-6">
-              <SessionHeader
-                call={{
-                  ...call,
-                  status: isCallActive ? "active" : "ended",
-                }}
-                onTerminate={handleTerminateCall}
-                isTerminating={isTerminating}
-              />
+            {/* Left Half: Scrollable column with bottom fade easing into background */}
+            <div className="w-full xl:w-1/2 relative min-h-0 h-full flex flex-col">
+              <div className="w-full flex-1 flex flex-col space-y-4 overflow-y-auto min-h-0 h-full pr-1 sm:pr-2 pb-8">
+                <SessionHeader
+                  call={{
+                    ...call,
+                    status: isCallActive ? "active" : "ended",
+                  }}
+                  onTerminate={handleTerminateCall}
+                  isTerminating={isTerminating}
+                  onDelete={handleDeleteCall}
+                />
 
-              <OverlappedAudioPlayer
-                callId={call.id}
-                isCallActive={isCallActive}
-                call={call}
-              />
+                <OverlappedAudioPlayer
+                  key={call.id}
+                  callId={call.id}
+                  isCallActive={isCallActive}
+                  call={call}
+                />
 
-              <GnomeLiveEditor
-                callId={call.id}
-                gnome={call.gnome}
-                isCallActive={isCallActive}
-                onGnomeUpdated={reloadDetail}
-              />
+                <GnomeLiveEditor
+                  callId={call.id}
+                  gnome={call.gnome}
+                  isCallActive={isCallActive}
+                  onGnomeUpdated={reloadDetail}
+                />
+              </div>
+
+              {/* Bottom fade overlay easing into background (main scrollable section only) */}
+              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-canvas to-transparent z-10" />
             </div>
 
             {/* Right Half on Desktop: Pinned fixed window height, full flex-1 height */}

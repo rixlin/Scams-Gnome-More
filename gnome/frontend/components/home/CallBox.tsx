@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { Radio, Clock, Calendar, User, PhoneCall, ShieldAlert, Check } from "lucide-react";
+import { Radio, Clock, Calendar, User, PhoneCall, ShieldAlert, Check, Globe } from "lucide-react";
 import { CallSessionSummary } from "../../lib/types";
 import { useCallDuration } from "../../hooks/useCallDuration";
 import { formatDuration, formatCallDateTime, formatRegionWithCountry } from "../../lib/utils";
@@ -51,12 +51,12 @@ export const CallBox: React.FC<CallBoxProps> = ({
           : "border-zinc-800 bg-zinc-900/50 hover:border-zinc-700 hover:bg-zinc-900/80"
       }`}
     >
-      {/* Top Bar: Selection Checkbox / Status & Direct Action */}
+      {/* Top Bar: Status Indicator + Truncated Session ID (left) & End Call Action (right) */}
       <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           {isSelectionMode ? (
             <div
-              className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
+              className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 ${
                 isSelected
                   ? "bg-emerald-600 border-emerald-500 text-white"
                   : "bg-zinc-950 border-zinc-700 text-transparent hover:border-zinc-500"
@@ -66,42 +66,48 @@ export const CallBox: React.FC<CallBoxProps> = ({
             </div>
           ) : null}
 
+          {/* Status Indicator (LIVE / Ended) before the Call ID */}
           {isActive ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 animate-pulse">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 animate-pulse shrink-0">
               <span className="w-2 h-2 rounded-full bg-emerald-400" />
               LIVE
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700/50">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700/50 shrink-0">
               Ended
             </span>
           )}
+
+          {/* Truncated Session ID with full ID hover */}
           <span
-            className="text-xs text-zinc-400 font-mono truncate max-w-[150px]"
-            title={formatRegionWithCountry(call)}
+            className="text-xs font-mono text-zinc-300 hover:text-zinc-100 transition-colors cursor-help px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800/80 truncate"
+            title={call.id}
           >
-            {formatRegionWithCountry(call)}
+            #{call.id.slice(0, 8)}
           </span>
         </div>
 
-        {isActive && onTerminate && !isSelectionMode && (
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onTerminate(call.id);
-            }}
-            className="text-xs text-red-400 hover:text-red-300 hover:bg-red-950/40 px-2 py-1 rounded transition-all hover:scale-105 active:scale-95"
-            title="Terminate this call immediately"
-          >
-            End Call
-          </button>
-        )}
+        {/* Right-aligned Actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          {isActive && onTerminate && !isSelectionMode && (
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onTerminate(call.id);
+              }}
+              className="text-xs text-red-400 hover:text-red-300 hover:bg-red-950/40 px-2 py-0.5 rounded transition-all hover:scale-105 active:scale-95"
+              title="Terminate this call immediately"
+            >
+              End Call
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Main Box Details */}
       <div className="my-4 space-y-3">
-        {/* Scammer Number */}
+        {/* Scammer Number & Region */}
         <div>
           <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500 flex items-center gap-1.5 mb-0.5">
             <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />
@@ -109,6 +115,14 @@ export const CallBox: React.FC<CallBoxProps> = ({
           </div>
           <div className="text-base font-bold text-zinc-100 font-mono">
             {call.scammer_number}
+          </div>
+          {/* Region moved under scammer number with Globe icon */}
+          <div
+            className="flex items-center gap-1.5 text-xs text-zinc-400 font-mono mt-1.5 cursor-help"
+            title={formatRegionWithCountry(call)}
+          >
+            <Globe className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+            <span className="truncate">Region: {formatRegionWithCountry(call)}</span>
           </div>
         </div>
 
@@ -119,7 +133,10 @@ export const CallBox: React.FC<CallBoxProps> = ({
               <User className="w-3.5 h-3.5 text-emerald-400" />
               Gnome Assigned
             </div>
-            <div className="text-sm font-semibold text-emerald-300 truncate">
+            <div
+              className="text-sm font-semibold text-emerald-300 truncate cursor-help"
+              title={call.gnome_name}
+            >
               {call.gnome_name}
             </div>
           </div>

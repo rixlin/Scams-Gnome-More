@@ -70,7 +70,10 @@ export const GnomeLiveEditor: React.FC<GnomeLiveEditorProps> = ({
       <div className="p-3.5 rounded-xl bg-zinc-950/60 border border-zinc-800/80 space-y-2">
         <div className="flex items-center gap-2">
           <UserCheck className="w-4 h-4 text-emerald-400" />
-          <span className="text-xs font-bold text-emerald-300">
+          <span
+            className="text-xs font-bold text-emerald-300 cursor-help"
+            title={gnome.name || "Assigned Gnome"}
+          >
             {gnome.name || "Assigned Gnome"}
           </span>
         </div>
