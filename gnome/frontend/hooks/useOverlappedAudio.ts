@@ -267,11 +267,14 @@ export function useOverlappedAudio({
     };
   }, [callId, autoPlay, getWsHost, playPcm16Chunk, urlVersion]);
 
-  // Release the audio device when leaving the page
+  // Release the audio device when leaving the page. With cacheComponents the page may only be
+  // hidden (state survives), so also go back to muted so a return requires a fresh "Start Stream".
   useEffect(() => {
     return () => {
       audioCtxRef.current?.close().catch(() => {});
       audioCtxRef.current = null;
+      isMutedRef.current = true;
+      setIsMuted(true);
     };
   }, []);
 

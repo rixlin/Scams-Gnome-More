@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, Suspense } from "react";
+import React, { useEffect, useRef, useState, useCallback, Suspense } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { CallSessionDetail, CallSessionSummary, TranscriptTurn } from "../../../lib/types";
 import { fetchCallDetail, terminateCall, deleteCall } from "../../../lib/api";
@@ -67,8 +67,29 @@ function CallSessionContent() {
     };
   }, [callId]);
 
+  // The recording is only served once the backend persists the call after it ends, so drop the
+  // live detail's recording_url (it would 404) and re-fetch until the saved call is available.
+  const recordingRetryTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
   const handleCallEndedTelemetry = useCallback(() => {
-    setCall((prev) => (prev ? { ...prev, status: "ended" } : null));
+    setCall((prev) =>
+      prev ? { ...prev, status: "ended", recording_url: null, recording_status: "unavailable" } : null
+    );
+    recordingRetryTimersRef.current.forEach(clearTimeout);
+    recordingRetryTimersRef.current = [1000, 3000, 6000].map((delay) =>
+      setTimeout(async () => {
+        if (!callId) return;
+        try {
+          const data = await fetchCallDetail(callId);
+          if (data.status === "ended") setCall(data);
+        } catch {}
+      }, delay)
+    );
+  }, [callId]);
+
+  useEffect(() => {
+    const timers = recordingRetryTimersRef;
+    return () => timers.current.forEach(clearTimeout);
   }, []);
 
   // Hook into live telemetry feed
@@ -92,6 +113,7 @@ function CallSessionContent() {
 
       await terminateCall(callId, reason);
 
+      handleCallEndedTelemetry();
       setCall((prev) => (prev ? {
         ...prev,
         status: "ended",

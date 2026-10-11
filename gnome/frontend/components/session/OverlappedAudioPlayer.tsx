@@ -214,6 +214,7 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
       playedAudioEls.forEach((el) => el.pause());
       playedAudioEls.clear();
       setIsRecordedPlaying(false);
+      setIsListening(false);
     };
   }, []);
 
