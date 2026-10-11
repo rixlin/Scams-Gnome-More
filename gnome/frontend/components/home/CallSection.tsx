@@ -20,6 +20,41 @@ interface CallSectionProps {
 
 const PAGE_SIZE = 8; // Two rows of 4 cards on desktop
 
+function getPaginationItems(
+  currentPage: number,
+  totalPages: number
+): (number | "ellipsis-start" | "ellipsis-end")[] {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
+
+  if (currentPage <= 4) {
+    return [1, 2, 3, 4, 5, "ellipsis-end", totalPages];
+  }
+
+  if (currentPage >= totalPages - 3) {
+    return [
+      1,
+      "ellipsis-start",
+      totalPages - 4,
+      totalPages - 3,
+      totalPages - 2,
+      totalPages - 1,
+      totalPages,
+    ];
+  }
+
+  return [
+    1,
+    "ellipsis-start",
+    currentPage - 1,
+    currentPage,
+    currentPage + 1,
+    "ellipsis-end",
+    totalPages,
+  ];
+}
+
 export const CallSection: React.FC<CallSectionProps> = ({
   title,
   description,
@@ -138,20 +173,33 @@ export const CallSection: React.FC<CallSectionProps> = ({
                 </button>
 
                 <div className="flex items-center gap-1">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-                    <button
-                      key={pageNum}
-                      type="button"
-                      onClick={() => setCurrentPage(pageNum)}
-                      className={`w-7 h-7 rounded-lg text-xs font-mono font-medium transition-all hover:scale-105 active:scale-95 ${
-                        effectivePage === pageNum
-                          ? "bg-emerald-600 text-white font-bold shadow-sm"
-                          : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  ))}
+                  {getPaginationItems(effectivePage, totalPages).map((item) => {
+                    if (typeof item === "string") {
+                      return (
+                        <span
+                          key={item}
+                          className="w-7 h-7 flex items-center justify-center text-xs text-zinc-500 font-mono select-none"
+                        >
+                          ...
+                        </span>
+                      );
+                    }
+
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setCurrentPage(item)}
+                        className={`w-7 h-7 rounded-lg text-xs font-mono font-medium transition-all hover:scale-105 active:scale-95 ${
+                          effectivePage === item
+                            ? "bg-emerald-600 text-white font-bold shadow-sm"
+                            : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                        }`}
+                      >
+                        {item}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 <button
