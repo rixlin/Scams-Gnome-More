@@ -73,8 +73,6 @@ function CallSessionContent() {
 
   // Hook into live telemetry feed
   const {
-    currentGnomeState,
-    activeTurnStateHistory,
     transcript,
     isTerminated,
   } = useCallTelemetry({
@@ -183,8 +181,6 @@ function CallSessionContent() {
                 callId={call.id}
                 transcript={transcript.length > 0 ? transcript : call.transcript}
                 gnomeName={call.gnome?.name || "Assigned Gnome"}
-                currentGnomeState={currentGnomeState}
-                activeTurnStateHistory={activeTurnStateHistory}
                 isCallActive={isCallActive}
                 onGnomeUpdated={reloadDetail}
                 className="h-full flex-1 min-h-0"
@@ -224,8 +220,6 @@ function CallSessionContent() {
                 callId={call.id}
                 transcript={transcript.length > 0 ? transcript : call.transcript}
                 gnomeName={call.gnome?.name || "Assigned Gnome"}
-                currentGnomeState={currentGnomeState}
-                activeTurnStateHistory={activeTurnStateHistory}
                 isCallActive={isCallActive}
                 onGnomeUpdated={reloadDetail}
                 onClose={() => setIsMobileDrawerOpen(false)}

@@ -159,13 +159,19 @@ class CallSession:
 
     # ---- transcript ----
 
-    def add_utterance(self, speaker: Speaker, text: str) -> Utterance | None:
+    def add_utterance(
+        self, speaker: Speaker, text: str, turn_id: str | None = None, publish: bool = True
+    ) -> Utterance | None:
+        """Record a finished utterance. publish=False when the caller sends the final event itself later."""
         text = text.strip()
         if not text:
             return None
-        u = Utterance(seq=len(self.transcript), ts=datetime.now(timezone.utc), speaker=speaker, text=text)
+        u = Utterance(
+            seq=len(self.transcript), ts=datetime.now(timezone.utc), speaker=speaker, text=text, turn_id=turn_id
+        )
         self.transcript.append(u)
-        self.publish("transcript", {"speaker": speaker, "text": text, "final": True, "seq": u.seq})
+        if publish:
+            self.publish("transcript", {"speaker": speaker, "text": text, "final": True, "seq": u.seq, "turn_id": turn_id})
         return u
 
     # ---- recording ----

@@ -35,6 +35,7 @@ class Utterance(BaseModel):
     ts: datetime
     speaker: Speaker
     text: str
+    turn_id: str | None = None  # ties live in-progress transcript events to this utterance
 
 
 # ---- REST bodies ----

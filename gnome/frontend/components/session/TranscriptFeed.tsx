@@ -2,16 +2,13 @@
 
 import React, { useRef, useEffect, useState } from "react";
 import { MessageSquare, User, Bot, Terminal, Zap, Send, RefreshCw, X } from "lucide-react";
-import { GnomeState, TranscriptTurn } from "../../lib/types";
-import { StateStepsLine } from "./StateStepsLine";
+import { TranscriptTurn } from "../../lib/types";
 import { formatStartTime } from "../../lib/utils";
 import { updateGnomeLive } from "../../lib/api";
 
 interface TranscriptFeedProps {
   transcript: TranscriptTurn[];
   gnomeName?: string;
-  currentGnomeState?: GnomeState;
-  activeTurnStateHistory?: GnomeState[];
   isCallActive?: boolean;
   callId?: string;
   onGnomeUpdated?: () => void;
@@ -22,8 +19,6 @@ interface TranscriptFeedProps {
 export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
   transcript,
   gnomeName = "Assigned Gnome",
-  currentGnomeState,
-  activeTurnStateHistory = [],
   isCallActive = true,
   callId,
   onGnomeUpdated,
@@ -51,6 +46,14 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
       prevCountRef.current = transcript.length;
     }
   }, [transcript.length]);
+
+  // Lines grow word by word while someone is speaking; keep the newest words in view
+  const totalTextLength = transcript.reduce((n, t) => n + t.text.length, 0);
+  useEffect(() => {
+    if (prevCountRef.current > 0) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [totalTextLength]);
 
   const handleSendPrompt = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -208,20 +211,6 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
                     </div>
                   )}
 
-                  {/* Single-line Historical Gnome State Record */}
-                  {isGnome && (
-                    <div className="pt-0.5 pb-1">
-                      <StateStepsLine
-                        isHistorical={true}
-                        completedStates={
-                          turn.state_history && turn.state_history.length > 0
-                            ? turn.state_history
-                            : ["listening", "analyzing", "crafting", "brewing", "responding"]
-                        }
-                      />
-                    </div>
-                  )}
-
                   {/* Dialogue Text */}
                   <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-sans text-zinc-100">
                     {turn.text}
@@ -230,22 +219,6 @@ export const TranscriptFeed: React.FC<TranscriptFeedProps> = ({
               </div>
             );
           })}
-
-          {/* In-Flight Gnome Thinking/Crafting/Brewing Indicator */}
-          {isCallActive && currentGnomeState && currentGnomeState !== "listening" && (
-            <div className="flex flex-col items-end shrink-0">
-              <div className="max-w-[88%] rounded-2xl p-3 bg-zinc-950/90 border border-emerald-500/30 text-zinc-100 space-y-2">
-                <div className="flex items-center gap-2 text-xs text-emerald-400 font-mono font-medium">
-                  <Bot className="w-3.5 h-3.5 animate-spin" />
-                  <span>{gnomeName} in-progress cycle:</span>
-                </div>
-                <StateStepsLine
-                  currentActiveState={currentGnomeState}
-                  completedStates={activeTurnStateHistory}
-                />
-              </div>
-            </div>
-          )}
 
           <div ref={bottomRef} className="h-1 shrink-0" />
         </div>

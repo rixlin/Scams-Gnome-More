@@ -16,10 +16,11 @@ import numpy as np
 from google.genai import types
 
 from app.agent import llm, prompts
-from app.agent.voice import TTSStream
+from app.agent.voice import Alignment, TTSStream
 from app.config import get_config, is_placeholder
 from app.core import audio, settings_store
 from app.core.session import SAMPLE_RATE, CallSession
+from app.models import Utterance
 
 log = logging.getLogger(__name__)
 
@@ -58,13 +59,26 @@ class StageDirectionFilter:
 
 
 class _Utterance:
-    """One gnome reply: text streams in, audio streams out to the call."""
+    """One gnome reply: text streams in, audio streams out to the call.
+
+    When the reply is voiced, its words reach the live transcript as the call plays them (timed with
+    ElevenLabs' character alignment), not as Gemini writes them, which is seconds earlier.
+    """
 
     def __init__(self, agent: "GnomeAgent", n: int) -> None:
         self.agent = agent
         self.mark = f"gnome-{n}"
+        self.turn_id = self.mark
         self.text_parts: list[str] = []
         self._text_q: asyncio.Queue[str | None] = asyncio.Queue()
+        cfg = get_config()
+        self.voiced = not is_placeholder(cfg.elevenlabs_api_key) and bool(agent.session.voice_id)
+        self._play_end = 0.0  # monotonic time when the audio sent so far finishes playing on the call
+        self._spoken = ""  # characters of audio sent so far, in order
+        self._reveals: list[asyncio.TimerHandle] = []
+        self._record: Utterance | None = None  # this reply's entry in session.transcript
+        self._played = not self.voiced  # all audio has finished playing on the call
+        self._final_sent = False
         self.task = asyncio.create_task(self._run())
 
     def push(self, text: str) -> None:
@@ -78,16 +92,66 @@ class _Utterance:
     def text(self) -> str:
         return re.sub(r"\s+", " ", "".join(self.text_parts)).strip()
 
+    def record(self, text: str | None = None) -> None:
+        """Add the reply to the transcript. Its final live event waits until the audio has played."""
+        self._record = self.agent.session.add_utterance(
+            "gnome", text if text is not None else self.text, turn_id=self.turn_id, publish=False
+        )
+        self._publish_final_if_done()
+
+    def interrupt(self) -> None:
+        """Barge-in: stop speaking now; the transcript keeps what was written."""
+        self.task.cancel()
+        self._mark_played()
+
+    def _mark_played(self) -> None:
+        self._played = True
+        self._publish_final_if_done()
+
+    def _publish_final_if_done(self) -> None:
+        if self._record is None or not self._played or self._final_sent:
+            return
+        self._final_sent = True
+        for h in self._reveals:
+            h.cancel()
+        u = self._record
+        self.agent.session.publish("transcript", {
+            "speaker": "gnome", "text": u.text, "final": True, "seq": u.seq, "turn_id": self.turn_id,
+        })
+
+    def publish_partial(self, text: str) -> None:
+        text = re.sub(r"\s+", " ", text).strip()
+        if text and not self._final_sent:
+            self.agent.session.publish("transcript", {
+                "speaker": "gnome", "text": text, "final": False, "turn_id": self.turn_id,
+            })
+
+    def _schedule_reveal(self, starts_at: float, alignment: Alignment | None) -> None:
+        """Publish this chunk's words at the moments the call plays them."""
+        loop = asyncio.get_running_loop()
+        now = time.monotonic()
+        if alignment is None:
+            # No timing for this chunk: show what Gemini has written so far once the chunk starts playing
+            self._reveals.append(loop.call_later(max(0.0, starts_at - now), self.publish_partial, self.text))
+            return
+        chars, starts_ms = alignment
+        base = self._spoken
+        for i, ch in enumerate(chars):
+            if ch.isspace() or i == len(chars) - 1:  # word by word
+                at = starts_at + starts_ms[i] / 1000
+                self._reveals.append(
+                    loop.call_later(max(0.0, at - now), self.publish_partial, base + "".join(chars[: i + 1]))
+                )
+        self._spoken = base + "".join(chars)
+
     async def _run(self) -> None:
         session = self.agent.session
-        cfg = get_config()
-        voice_id = session.voice_id
-        if is_placeholder(cfg.elevenlabs_api_key) or not voice_id:
+        if not self.voiced:
             # No voice configured: the reply still shows up in the transcript, it just isn't spoken
             self.agent.warn_once("tts", "ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID not set; the gnome can't speak yet")
             session.set_state("listening")
             return
-        tts = TTSStream(voice_id)
+        tts = TTSStream(session.voice_id)
         pump: asyncio.Task | None = None
         try:
             await tts.open()
@@ -113,6 +177,7 @@ class _Utterance:
             log.exception("TTS failed for call %s", session.id)
             session.publish("error", {"source": "tts", "message": str(e)})
             session.set_state("listening")
+            self._mark_played()
         finally:
             if pump is not None:
                 pump.cancel()
@@ -123,43 +188,46 @@ class _Utterance:
         sent_any = False
         # Head start: hold the first audio until _PREBUFFER_S is ready (or the reply is shorter than that),
         # so playback never starts on a tiny chunk and then stalls while the next one is generated.
-        held: list[bytes] = []
-        self._play_end = 0.0  # monotonic time when the audio sent so far finishes playing on the call
-        async for ulaw in tts.audio():
+        held: list[tuple[bytes, Alignment | None]] = []
+        async for ulaw, alignment in tts.audio():
             if not sent_any:
-                held.append(ulaw)
-                if sum(map(len, held)) < _PREBUFFER_S * SAMPLE_RATE:
+                held.append((ulaw, alignment))
+                if sum(len(c) for c, _ in held) < _PREBUFFER_S * SAMPLE_RATE:
                     session.set_state("brewing")
                     continue
                 await self._start_speaking()
                 sent_any = True
-                for chunk in held:
-                    await self._send_audio(chunk)
+                for chunk, al in held:
+                    await self._send_audio(chunk, al)
                 held.clear()
                 continue
             if time.monotonic() > self._play_end and len(ulaw) < _LATE_SCRAP_S * SAMPLE_RATE:
                 continue
-            await self._send_audio(ulaw)
+            await self._send_audio(ulaw, alignment)
         if held:  # the whole reply was shorter than the head start
             await self._start_speaking()
             sent_any = True
-            for chunk in held:
-                await self._send_audio(chunk)
+            for chunk, al in held:
+                await self._send_audio(chunk, al)
         if sent_any:
             # Twilio echoes this mark back once playback reaches it
             self.agent.pending_mark = self.mark
             await self.agent.send_twilio({"event": "mark", "mark": {"name": self.mark}})
         else:
             session.set_state("listening")
+        # The final transcript event goes out once the last word has actually played
+        asyncio.get_running_loop().call_later(max(0.0, self._play_end - time.monotonic()), self._mark_played)
 
     async def _start_speaking(self) -> None:
         await self.agent.wait_for_caller_silence()
         self.agent.session.set_state("responding")
         self.agent.session.set_gnome_speaking(True)
 
-    async def _send_audio(self, ulaw: bytes) -> None:
+    async def _send_audio(self, ulaw: bytes, alignment: Alignment | None = None) -> None:
         session = self.agent.session
-        self._play_end = max(self._play_end, time.monotonic()) + len(ulaw) / SAMPLE_RATE
+        starts_at = max(self._play_end, time.monotonic())
+        self._play_end = starts_at + len(ulaw) / SAMPLE_RATE
+        self._schedule_reveal(starts_at, alignment)
         pcm = audio.ulaw_to_pcm16(ulaw)
         session.add_gnome_audio(pcm)
         await self.agent.send_twilio({"event": "media", "media": {"payload": base64.b64encode(ulaw).decode()}})
@@ -178,7 +246,10 @@ class GnomeAgent:
         self._frame_buf: list[np.ndarray] = []
         self._utterance: _Utterance | None = None
         self._utt_counter = itertools.count(1)
+        self._last_utterance: _Utterance | None = None  # may still be playing after its turn ended
         self._caller_buf = ""
+        self._caller_counter = itertools.count(1)
+        self._caller_turn_id: str | None = None  # live transcript id of the caller line in progress
         self._connected_before = False  # reconnects carry the transcript so far
         self._stage_filter = StageDirectionFilter()
 
@@ -343,15 +414,24 @@ class GnomeAgent:
     # ---- turn handling ----
 
     def _on_caller_text(self, text: str) -> None:
+        if self._caller_turn_id is None:
+            self._caller_turn_id = f"caller-{next(self._caller_counter)}"
         self._caller_buf += text
         if not self.session.gnome_speaking:
             self.session.set_state("analyzing")
-        self.session.publish("transcript", {"speaker": "caller", "text": self._caller_buf.strip(), "final": False})
+        self.session.publish("transcript", {
+            "speaker": "caller", "text": self._caller_buf.strip(), "final": False, "turn_id": self._caller_turn_id,
+        })
 
     def _flush_caller(self) -> None:
         if self._caller_buf.strip():
-            self.session.add_utterance("caller", self._caller_buf)
+            self.session.add_utterance("caller", self._caller_buf, turn_id=self._caller_turn_id)
         self._caller_buf = ""
+        self._caller_turn_id = None
+
+    def _new_utterance(self) -> "_Utterance":
+        self._last_utterance = _Utterance(self, next(self._utt_counter))
+        return self._last_utterance
 
     def _on_gnome_text(self, text: str) -> None:
         text = self._stage_filter.feed(text)
@@ -360,9 +440,12 @@ class GnomeAgent:
         if self._utterance is None:
             self._flush_caller()
             self.session.set_state("crafting")
-            self._utterance = _Utterance(self, next(self._utt_counter))
+            self._utterance = self._new_utterance()
         self._utterance.push(text)
-        self.session.publish("transcript", {"speaker": "gnome", "text": self._utterance.text, "final": False})
+        if not self._utterance.voiced:
+            # Nothing will be spoken, so show the text as Gemini writes it. Voiced replies are revealed
+            # word by word as the call plays them (see _Utterance._schedule_reveal).
+            self._utterance.publish_partial(self._utterance.text)
 
     def _end_gnome_turn(self) -> None:
         self._flush_caller()
@@ -372,7 +455,7 @@ class GnomeAgent:
             return
         utt.end()
         if utt.text:
-            self.session.add_utterance("gnome", utt.text)
+            utt.record()
             self.session.publish("gnome.response", {"text": utt.text})
 
     async def _barge_in(self) -> None:
@@ -380,9 +463,11 @@ class GnomeAgent:
         self._stage_filter.reset()
         utt, self._utterance = self._utterance, None
         if utt is not None:
-            utt.task.cancel()
+            utt.interrupt()
             if utt.text:
-                self.session.add_utterance("gnome", utt.text + " -")
+                utt.record(utt.text + " -")
+        if self._last_utterance is not None and self._last_utterance is not utt:
+            self._last_utterance.interrupt()  # an earlier reply still playing out
         self.pending_mark = None
         await self.send_twilio({"event": "clear"})
         self.session.truncate_gnome_audio()
@@ -393,10 +478,10 @@ class GnomeAgent:
         if self._utterance is not None or self.session.ended:
             return
         line = random.choice(prompts.STALL_LINES)
-        utt = _Utterance(self, next(self._utt_counter))
+        utt = self._new_utterance()
         utt.push(line)
         utt.end()
-        self.session.add_utterance("gnome", line)
+        utt.record(line)
         try:
             await utt.task
         except Exception:

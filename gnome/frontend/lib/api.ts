@@ -150,7 +150,8 @@ export async function fetchCallDetail(id: string): Promise<CallSessionDetail> {
       const data = await res.json();
       const rawTurns = (data.transcript || data.utterances || []) as Array<Record<string, unknown>>;
       const mappedTurns: TranscriptTurn[] = rawTurns.map((u, idx: number) => ({
-        id: (u.id as string) || `turn-${(u.seq as number) ?? idx}`,
+        // turn_id matches the live socket's ids, so words still streaming in update this line
+        id: (u.turn_id as string) || (u.id as string) || `turn-${(u.seq as number) ?? idx}`,
         speaker: (u.speaker === "caller" ? "user" : (u.speaker as "user" | "gnome" | "operator")),
         text: (u.text as string) || "",
         timestamp: (u.ts as string) || (u.timestamp as string) || new Date().toISOString(),

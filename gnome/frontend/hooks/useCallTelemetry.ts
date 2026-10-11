@@ -118,14 +118,32 @@ export function useCallTelemetry({
 
           setLiveTranscript((prev) => {
             const currentList = prev.length > 0 ? prev : initialTranscriptRef.current;
+
+            // The backend tags each line with a turn_id; its words stream in as they are spoken,
+            // so grow that line in place (even if the other side has started talking since)
+            if (data.turn_id) {
+              const idx = currentList.findIndex((t) => t.id === data.turn_id);
+              if (idx !== -1) {
+                const existing = currentList[idx];
+                if (existing.final && !isFinal) return currentList; // late partial for a finished line
+                const updated: TranscriptTurn = {
+                  ...existing,
+                  text: text || existing.text,
+                  final: isFinal,
+                  seq: seq ?? existing.seq,
+                };
+                return [...currentList.slice(0, idx), updated, ...currentList.slice(idx + 1)];
+              }
+            }
+
             // The socket replays the transcript so far on connect; skip lines we already loaded via REST
             if (seq !== undefined && currentList.some((t) => t.seq === seq && t.final !== false)) {
               return currentList;
             }
             const lastTurn = currentList[currentList.length - 1];
 
-            // If same speaker and last turn was in-progress, update in-place
-            if (lastTurn && lastTurn.speaker === speaker && !lastTurn.final) {
+            // Untagged events (older backends): same speaker and last turn in progress -> update in place
+            if (!data.turn_id && lastTurn && lastTurn.speaker === speaker && !lastTurn.final) {
               const updated: TranscriptTurn = {
                 ...lastTurn,
                 text: text || lastTurn.text,
@@ -148,14 +166,14 @@ export function useCallTelemetry({
               in_call_time: speaker === "operator" ? "+live" : undefined,
             };
 
-            // If gnome completed turn, reset activeTurnStateHistory for next cycle
-            if (speaker === "gnome" && isFinal) {
-              setActiveTurnStateHistory(["listening"]);
-              setCurrentGnomeState("listening");
-            }
-
             return [...currentList, newTurn];
           });
+
+          // Gnome finished a turn (appended or completed in place): reset the state pipeline for the next one
+          if (speaker === "gnome" && isFinal) {
+            setActiveTurnStateHistory(["listening"]);
+            setCurrentGnomeState("listening");
+          }
         }
 
         // 3. Operator feedback: no transcript turn here. The backend records feedback as an
