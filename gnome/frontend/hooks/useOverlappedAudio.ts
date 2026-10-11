@@ -36,6 +36,23 @@ export function useOverlappedAudio({
   const wsRef = useRef<WebSocket | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
+  const isMutedRef = useRef(isMuted);
+  const userVolumeRef = useRef(userVolume);
+  const gnomeVolumeRef = useRef(gnomeVolume);
+  const nextPlayTimesRef = useRef<{ user: number; gnome: number }>({ user: 0, gnome: 0 });
+
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
+
+  useEffect(() => {
+    userVolumeRef.current = userVolume;
+  }, [userVolume]);
+
+  useEffect(() => {
+    gnomeVolumeRef.current = gnomeVolume;
+  }, [gnomeVolume]);
+
   const getWsHost = useCallback(() => {
     if (wsBaseUrl) return wsBaseUrl;
     if (typeof window !== "undefined") {
@@ -72,8 +89,8 @@ export function useOverlappedAudio({
       gAnalyser.connect(gGain);
       gGain.connect(ctx.destination);
 
-      uGain.gain.value = isMuted ? 0 : userVolume;
-      gGain.gain.value = isMuted ? 0 : gnomeVolume;
+      uGain.gain.value = isMutedRef.current ? 0 : userVolumeRef.current;
+      gGain.gain.value = isMutedRef.current ? 0 : gnomeVolumeRef.current;
 
       audioCtxRef.current = ctx;
       userGainRef.current = uGain;
@@ -83,10 +100,10 @@ export function useOverlappedAudio({
     }
 
     if (audioCtxRef.current.state === "suspended") {
-      audioCtxRef.current.resume();
+      audioCtxRef.current.resume().catch(() => {});
     }
     return audioCtxRef.current;
-  }, [isMuted, userVolume, gnomeVolume]);
+  }, []);
 
   // Play raw 16-bit PCM mono audio chunk (8kHz) into a specific channel
   const playPcm16Chunk = useCallback(
@@ -97,22 +114,20 @@ export function useOverlappedAudio({
       try {
         const binary = atob(pcmBase64);
         const len = binary.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-          bytes[i] = binary.charCodeAt(i);
-        }
-
-        // 16-bit signed integer samples
-        const sampleCount = Math.floor(bytes.byteLength / 2);
+        const sampleCount = Math.floor(len / 2);
         if (sampleCount === 0) return;
 
-        const int16 = new Int16Array(bytes.buffer, bytes.byteOffset, sampleCount);
+        // Decode 16-bit signed integer samples safely without alignment issues
         const float32 = new Float32Array(sampleCount);
         for (let i = 0; i < sampleCount; i++) {
-          float32[i] = int16[i] / 32768.0;
+          const lo = binary.charCodeAt(i * 2);
+          const hi = binary.charCodeAt(i * 2 + 1);
+          let val = (hi << 8) | lo;
+          if (val >= 0x8000) val -= 0x10000;
+          float32[i] = val / 32768.0;
         }
 
-        const buffer = ctx.createBuffer(1, float32.length, sampleRate);
+        const buffer = ctx.createBuffer(1, sampleCount, sampleRate);
         buffer.getChannelData(0).set(float32);
 
         const source = ctx.createBufferSource();
@@ -125,7 +140,12 @@ export function useOverlappedAudio({
         } else {
           source.connect(ctx.destination);
         }
-        source.start();
+
+        // Schedule seamlessly ahead of current time to avoid overlapping jitter
+        const now = ctx.currentTime;
+        const nextTime = Math.max(now, nextPlayTimesRef.current[channel]);
+        source.start(nextTime);
+        nextPlayTimesRef.current[channel] = nextTime + buffer.duration;
       } catch {
         // Ignored
       }
@@ -133,39 +153,45 @@ export function useOverlappedAudio({
     [ensureAudioContext]
   );
 
+  const playPcm16ChunkRef = useRef(playPcm16Chunk);
+  useEffect(() => {
+    playPcm16ChunkRef.current = playPcm16Chunk;
+  }, [playPcm16Chunk]);
+
   // Volume & Mute synchronizers
   const setUserVolume = useCallback(
     (val: number) => {
       setUserVolumeState(val);
-      if (userGainRef.current && !isMuted) {
+      if (userGainRef.current && !isMutedRef.current) {
         userGainRef.current.gain.value = val;
       }
     },
-    [isMuted]
+    []
   );
 
   const setGnomeVolume = useCallback(
     (val: number) => {
       setGnomeVolumeState(val);
-      if (gnomeGainRef.current && !isMuted) {
+      if (gnomeGainRef.current && !isMutedRef.current) {
         gnomeGainRef.current.gain.value = val;
       }
     },
-    [isMuted]
+    []
   );
 
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => {
       const next = !prev;
+      isMutedRef.current = next;
       if (userGainRef.current) {
-        userGainRef.current.gain.value = next ? 0 : userVolume;
+        userGainRef.current.gain.value = next ? 0 : userVolumeRef.current;
       }
       if (gnomeGainRef.current) {
-        gnomeGainRef.current.gain.value = next ? 0 : gnomeVolume;
+        gnomeGainRef.current.gain.value = next ? 0 : gnomeVolumeRef.current;
       }
       return next;
     });
-  }, [userVolume, gnomeVolume]);
+  }, []);
 
   // Setup WebSocket connection to /ws/live/{callId}
   useEffect(() => {
@@ -198,9 +224,9 @@ export function useOverlappedAudio({
           const data = payload.data || payload;
 
           if (type === "audio.caller" && data.pcm16) {
-            playPcm16Chunk("user", data.pcm16, data.sample_rate || 8000);
+            playPcm16ChunkRef.current("user", data.pcm16, data.sample_rate || 8000);
           } else if (type === "audio.gnome" && data.pcm16) {
-            playPcm16Chunk("gnome", data.pcm16, data.sample_rate || 8000);
+            playPcm16ChunkRef.current("gnome", data.pcm16, data.sample_rate || 8000);
           }
         } catch {
           // Ignored
@@ -235,7 +261,7 @@ export function useOverlappedAudio({
       ws.close();
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [callId, autoPlay, getWsHost, playPcm16Chunk]);
+  }, [callId, autoPlay, getWsHost]);
 
   return {
     isMuted,

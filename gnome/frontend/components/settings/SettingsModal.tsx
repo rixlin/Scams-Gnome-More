@@ -13,9 +13,11 @@ import {
   Palette,
   ChevronDown,
   Activity,
+  Volume2,
+  Headphones,
 } from "lucide-react";
 import { fetchSettings, updateSettings, pingRest, pingWs } from "../../lib/api";
-import { CallSessionSummary } from "../../lib/types";
+import { CallSessionSummary, AudioPlaybackMode } from "../../lib/types";
 import { createSampleDebugCallDetail } from "../../lib/debug-call-generator";
 import { useTheme } from "../theme/ThemeProvider";
 import { THEME_OPTIONS } from "../../lib/theme";
@@ -34,10 +36,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const { notify } = useNotification();
   const [isClosing, setIsClosing] = useState(false);
-  const [activeTab, setActiveTab] = useState<"appearance" | "system" | "debug">("appearance");
+  const [activeTab, setActiveTab] = useState<"appearance" | "system" | "audio" | "debug">("appearance");
   const [loading, setLoading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Audio Playback Mode state
+  const [playbackMode, setPlaybackMode] = useState<AudioPlaybackMode>(() => {
+    if (typeof window !== "undefined") {
+      return (window.localStorage.getItem("gnome_playback_mode") as AudioPlaybackMode) || "stereo";
+    }
+    return "stereo";
+  });
 
   const { theme, setTheme, currentOption } = useTheme();
   const [isThemeDropdownOpen, setIsThemeDropdownOpen] = useState(false);
@@ -150,6 +160,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
+  const handlePlaybackModeChange = (mode: AudioPlaybackMode) => {
+    setPlaybackMode(mode);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("gnome_playback_mode", mode);
+      window.dispatchEvent(new Event("gnome_playback_mode_changed"));
+    }
+    notify.success(
+      "Audio Setting Updated",
+      `Recorded audio playback mode set to ${
+        mode === "stereo" ? "Stereo (2-Channel)" : "Mono (Dual Simultaneous Streams)"
+      }.`
+    );
+  };
+
   // Debug Call Form state
   const [debugScammerNumber, setDebugScammerNumber] = useState("+1 (555) 392-8172");
   const [debugRegion, setDebugRegion] = useState("New York, NY");
@@ -203,6 +227,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (typeof window !== "undefined") {
         window.localStorage.setItem("gnome_backend_url", backendUrl);
         window.localStorage.setItem("gnome_ws_url", wsUrl);
+        window.localStorage.setItem("gnome_playback_mode", playbackMode);
       }
 
       await updateSettings({
@@ -352,6 +377,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           >
             <Server className="w-4 h-4" />
             Backend
+          </button>
+          <button
+            onClick={() => setActiveTab("audio")}
+            className={`py-3 text-xs font-semibold border-b-2 flex items-center gap-2 transition-all hover:scale-105 active:scale-95 ${
+              activeTab === "audio"
+                ? "border-emerald-500 text-emerald-400"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <Headphones className="w-4 h-4" />
+            Audio
           </button>
           <button
             onClick={() => setActiveTab("debug")}
@@ -747,7 +783,113 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 3: DEBUG TOOLS */}
+          {/* TAB 3: AUDIO SETTINGS */}
+          {activeTab === "audio" && (
+            <div className="space-y-5">
+              <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800/80 space-y-1">
+                <h4 className="text-xs font-bold text-zinc-100 flex items-center gap-2">
+                  <Headphones className="w-4 h-4 text-emerald-400" />
+                  Recorded Audio Playback Configuration
+                </h4>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Select how recorded audio streams from completed sessions are unpacked and played back.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <label className="block text-xs font-semibold text-zinc-300">
+                  Playback Mode
+                </label>
+
+                {/* Option 1: Stereo */}
+                <div
+                  onClick={() => handlePlaybackModeChange("stereo")}
+                  className={`p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] ${
+                    playbackMode === "stereo"
+                      ? "bg-emerald-950/20 border-emerald-500/80 shadow-xs"
+                      : "bg-zinc-950/60 border-zinc-800/80 hover:border-zinc-700"
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`w-4 h-4 rounded-full mt-0.5 border flex items-center justify-center shrink-0 ${
+                          playbackMode === "stereo"
+                            ? "border-emerald-500 bg-emerald-500"
+                            : "border-zinc-600 bg-transparent"
+                        }`}
+                      >
+                        {playbackMode === "stereo" && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-zinc-950" />
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-zinc-100">
+                            Stereo Playback
+                          </span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                            Standard
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-400 leading-relaxed">
+                          Plays recorded audio as a standard 2-channel stereo WAV file. The caller (scammer) audio is routed to the left channel, and the gnome dialogue is routed to the right channel. Ideal for headphone wiretap monitoring.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Option 2: Mono */}
+                <div
+                  onClick={() => handlePlaybackModeChange("mono")}
+                  className={`p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] ${
+                    playbackMode === "mono"
+                      ? "bg-emerald-950/20 border-emerald-500/80 shadow-xs"
+                      : "bg-zinc-950/60 border-zinc-800/80 hover:border-zinc-700"
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`w-4 h-4 rounded-full mt-0.5 border flex items-center justify-center shrink-0 ${
+                          playbackMode === "mono"
+                            ? "border-emerald-500 bg-emerald-500"
+                            : "border-zinc-600 bg-transparent"
+                        }`}
+                      >
+                        {playbackMode === "mono" && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-zinc-950" />
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-zinc-100">
+                            Mono Playback (Simultaneous Dual Streams)
+                          </span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-teal-500/15 text-teal-400 border border-teal-500/30">
+                            Unpacked
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-400 leading-relaxed">
+                          Unpacks the 2-channel stereo WAV received from the backend into two synchronized mono audio streams (caller and gnome) that are played simultaneously. Controls remain unified on a single timeline bar.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-zinc-950/40 border border-zinc-800/60 flex items-center gap-3">
+                <Volume2 className="w-4 h-4 text-zinc-400 shrink-0" />
+                <span className="text-[11px] text-zinc-400 leading-relaxed">
+                  Active playback mode: <span className="font-semibold text-zinc-200 capitalize">{playbackMode}</span>. Changes take effect on subsequent playback starts.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: DEBUG TOOLS */}
           {activeTab === "debug" && (
             <div className="space-y-4">
               <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800/80">

@@ -62,3 +62,18 @@ def test_stereo_to_mono_mixes_both_sides():
     with wave.open(io.BytesIO(mono)) as w:
         assert (w.getnchannels(), w.getframerate()) == (1, 8000)
         assert (np.frombuffer(w.readframes(8), np.int16) == 700).all()
+
+
+def test_extract_channel_wav():
+    left, right = np.full(8, 1000, np.int16), np.full(8, -300, np.int16)
+    stereo = audio.stereo_wav(left, right, 8000)
+
+    caller_mono = audio.extract_channel_wav(stereo, 0)
+    with wave.open(io.BytesIO(caller_mono)) as w:
+        assert (w.getnchannels(), w.getframerate()) == (1, 8000)
+        assert (np.frombuffer(w.readframes(8), np.int16) == 1000).all()
+
+    gnome_mono = audio.extract_channel_wav(stereo, 1)
+    with wave.open(io.BytesIO(gnome_mono)) as w:
+        assert (w.getnchannels(), w.getframerate()) == (1, 8000)
+        assert (np.frombuffer(w.readframes(8), np.int16) == -300).all()

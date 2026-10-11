@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, Suspense } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { CallSessionDetail, CallSessionSummary } from "../../../lib/types";
+import { CallSessionDetail, CallSessionSummary, TranscriptTurn } from "../../../lib/types";
 import { fetchCallDetail, terminateCall } from "../../../lib/api";
 import { SessionHeader } from "../../../components/session/SessionHeader";
 import { OverlappedAudioPlayer } from "../../../components/session/OverlappedAudioPlayer";
@@ -16,6 +16,8 @@ import {
   MessageSquare,
   ChevronLeft,
 } from "lucide-react";
+
+const EMPTY_TRANSCRIPT: TranscriptTurn[] = [];
 
 function CallSessionContent() {
   const params = useParams();
@@ -77,7 +79,7 @@ function CallSessionContent() {
     isTerminated,
   } = useCallTelemetry({
     callId,
-    initialTranscript: call?.transcript || [],
+    initialTranscript: call?.transcript || EMPTY_TRANSCRIPT,
     onCallEnded: handleCallEndedTelemetry,
   });
 

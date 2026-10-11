@@ -19,11 +19,33 @@ export function useCallTelemetry({
   const [activeSpeaker, setActiveSpeaker] = useState<"user" | "gnome" | "none">("none");
   const [currentGnomeState, setCurrentGnomeState] = useState<GnomeState>("listening");
   const [activeTurnStateHistory, setActiveTurnStateHistory] = useState<GnomeState[]>(["listening"]);
+  const [prevCallId, setPrevCallId] = useState(callId);
   const [liveTranscript, setLiveTranscript] = useState<TranscriptTurn[]>([]);
+
+  if (callId !== prevCallId) {
+    setPrevCallId(callId);
+    setLiveTranscript([]);
+  }
+
   const [isTerminated, setIsTerminated] = useState(false);
   const [wsStatus, setWsStatus] = useState<"idle" | "connecting" | "open" | "closed" | "error">("idle");
 
   const wsRef = useRef<WebSocket | null>(null);
+  const initialTranscriptRef = useRef(initialTranscript);
+  const onCallEndedRef = useRef(onCallEnded);
+  const activeTurnStateHistoryRef = useRef(activeTurnStateHistory);
+
+  useEffect(() => {
+    initialTranscriptRef.current = initialTranscript;
+  }, [initialTranscript]);
+
+  useEffect(() => {
+    onCallEndedRef.current = onCallEnded;
+  }, [onCallEnded]);
+
+  useEffect(() => {
+    activeTurnStateHistoryRef.current = activeTurnStateHistory;
+  }, [activeTurnStateHistory]);
 
   const getWsHost = useCallback(() => {
     if (wsBaseUrl) return wsBaseUrl;
@@ -89,7 +111,7 @@ export function useCallTelemetry({
           }
         }
 
-        // 2. Unified Transcript Event (or flat legacy event)
+        // 2. Unified Transcript Event
         else if (type === "transcript" || type === "transcript_chunk") {
           const rawSpk = data.speaker || "user";
           const speaker: "user" | "caller" | "gnome" | "operator" =
@@ -99,26 +121,28 @@ export function useCallTelemetry({
           const turnId = data.turn_id || `turn-${data.seq ?? Date.now()}`;
 
           setLiveTranscript((prev) => {
-            const currentList = prev.length > 0 ? prev : initialTranscript;
+            const currentList = prev.length > 0 ? prev : initialTranscriptRef.current;
             const lastTurn = currentList[currentList.length - 1];
 
-            // If same speaker and last turn wasn't final, update it
-            if (lastTurn && lastTurn.speaker === speaker && !isFinal) {
+            // If same speaker and last turn was in-progress, update in-place
+            if (lastTurn && lastTurn.speaker === speaker && !lastTurn.final) {
               const updated: TranscriptTurn = {
                 ...lastTurn,
-                text,
+                text: text || lastTurn.text,
+                final: isFinal,
+                seq: data.seq ?? lastTurn.seq,
               };
               return [...currentList.slice(0, -1), updated];
             }
 
-            // Finalized chunk or new speaker turn
+            // Append new turn chunk
             const newTurn: TranscriptTurn = {
               id: turnId,
               speaker,
               text,
               timestamp: payload.ts || data.timestamp || new Date().toISOString(),
               state_history:
-                speaker === "gnome" ? [...activeTurnStateHistory] : undefined,
+                speaker === "gnome" ? [...activeTurnStateHistoryRef.current] : undefined,
               seq: data.seq,
               final: isFinal,
             };
@@ -141,15 +165,22 @@ export function useCallTelemetry({
             text: data.text,
             timestamp: payload.ts || new Date().toISOString(),
             in_call_time: "+live",
+            final: true,
           };
-          setLiveTranscript((prev) => [...prev, opTurn]);
+          setLiveTranscript((prev) => {
+            const list = prev.length > 0 ? prev : initialTranscriptRef.current;
+            if (list.some((t) => t.speaker === "operator" && t.text === data.text && t.id === opTurn.id)) {
+              return list;
+            }
+            return [...list, opTurn];
+          });
         }
 
         // 4. Call Terminated / Ended
         else if (type === "call.ended" || type === "call_terminated") {
           setIsTerminated(true);
           setActiveSpeaker("none");
-          if (onCallEnded) onCallEnded();
+          if (onCallEndedRef.current) onCallEndedRef.current();
         }
       } catch {
         // Ignored
@@ -159,7 +190,7 @@ export function useCallTelemetry({
     return () => {
       ws.close();
     };
-  }, [callId, getWsHost, onCallEnded, activeTurnStateHistory, initialTranscript, normalizeState]);
+  }, [callId, getWsHost, normalizeState]);
 
   const transcript = liveTranscript.length > 0 ? liveTranscript : initialTranscript;
 

@@ -16,8 +16,9 @@ import {
   Download,
 } from "lucide-react";
 import { useOverlappedAudio } from "../../hooks/useOverlappedAudio";
-import { CallSessionDetail } from "../../lib/types";
+import { CallSessionDetail, AudioPlaybackMode } from "../../lib/types";
 import { formatDuration } from "../../lib/utils";
+import { unpackStereoWav, UnpackedStereoAudio } from "../../lib/wav-utils";
 
 interface OverlappedAudioPlayerProps {
   callId: string;
@@ -93,17 +94,93 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
     call?.recording_status === "unavailable" ||
     !call?.recording_url;
 
+  // Active playback mode: "stereo" (default) or "mono" (unpacked dual streams)
+  const [playbackMode, setPlaybackMode] = useState<AudioPlaybackMode>(() => {
+    if (typeof window !== "undefined") {
+      return (window.localStorage.getItem("gnome_playback_mode") as AudioPlaybackMode) || "stereo";
+    }
+    return "stereo";
+  });
+
+  useEffect(() => {
+    const handleModeChange = () => {
+      const mode = (window.localStorage.getItem("gnome_playback_mode") as AudioPlaybackMode) || "stereo";
+      setPlaybackMode(mode);
+    };
+    window.addEventListener("gnome_playback_mode_changed", handleModeChange);
+    window.addEventListener("storage", handleModeChange);
+    return () => {
+      window.removeEventListener("gnome_playback_mode_changed", handleModeChange);
+      window.removeEventListener("storage", handleModeChange);
+    };
+  }, []);
+
   const initialRecordedDuration = call?.duration_seconds || 145;
   const [recordedDuration, setRecordedDuration] = useState<number>(initialRecordedDuration);
   const [recordedCurrentTime, setRecordedCurrentTime] = useState<number>(0);
   const [isRecordedPlaying, setIsRecordedPlaying] = useState<boolean>(false);
   const [recordedVolume, setRecordedVolume] = useState<number>(0.85);
   const [isRecordedMuted, setIsRecordedMuted] = useState<boolean>(false);
+
+  // Stereo playback ref
   const audioElRef = useRef<HTMLAudioElement | null>(null);
 
-  // Simulated playback interval if no remote audio element is loaded
+  // Mono unpacked playback refs & state
+  const [unpackedAudio, setUnpackedAudio] = useState<UnpackedStereoAudio | null>(null);
+  const callerAudioRef = useRef<HTMLAudioElement | null>(null);
+  const gnomeAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Fetch and unpack 2-channel WAV into dual mono streams when mono mode is active
+  useEffect(() => {
+    if (!isEnded || isRecordingUnavailable || playbackMode !== "mono" || !call?.recording_url) {
+      return;
+    }
+
+    let active = true;
+    let localResult: UnpackedStereoAudio | null = null;
+
+    fetch(call.recording_url)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch recording WAV");
+        return res.arrayBuffer();
+      })
+      .then(async (arrayBuffer) => {
+        if (!active) return;
+        const result = await unpackStereoWav(arrayBuffer);
+        if (!active) {
+          URL.revokeObjectURL(result.callerBlobUrl);
+          URL.revokeObjectURL(result.gnomeBlobUrl);
+          return;
+        }
+        localResult = result;
+        setUnpackedAudio(result);
+        if (result.durationSeconds > 0) {
+          setRecordedDuration(result.durationSeconds);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not unpack stereo audio to mono channels:", err);
+      });
+
+    return () => {
+      active = false;
+      if (localResult) {
+        URL.revokeObjectURL(localResult.callerBlobUrl);
+        URL.revokeObjectURL(localResult.gnomeBlobUrl);
+      }
+      setUnpackedAudio(null);
+    };
+  }, [isEnded, isRecordingUnavailable, playbackMode, call?.recording_url]);
+
+  // Simulated playback interval if no audio elements loaded
   useEffect(() => {
     if (!isEnded || isRecordingUnavailable || !isRecordedPlaying) return;
+
+    if (playbackMode === "mono" && unpackedAudio && callerAudioRef.current) {
+      callerAudioRef.current.play().catch(() => {});
+      gnomeAudioRef.current?.play().catch(() => {});
+      return;
+    }
 
     if (call?.recording_url && audioElRef.current) {
       audioElRef.current.play().catch(() => {});
@@ -121,23 +198,62 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isEnded, isRecordingUnavailable, isRecordedPlaying, recordedDuration, call?.recording_url]);
+  }, [isEnded, isRecordingUnavailable, isRecordedPlaying, recordedDuration, call?.recording_url, playbackMode, unpackedAudio]);
+
+  const updateAudioVolumeAndMute = (vol: number, muted: boolean) => {
+    if (playbackMode === "mono" && unpackedAudio) {
+      if (callerAudioRef.current) {
+        callerAudioRef.current.volume = muted ? 0 : vol;
+        callerAudioRef.current.muted = muted;
+      }
+      if (gnomeAudioRef.current) {
+        gnomeAudioRef.current.volume = muted ? 0 : vol;
+        gnomeAudioRef.current.muted = muted;
+      }
+    } else if (audioElRef.current) {
+      audioElRef.current.volume = muted ? 0 : vol;
+      audioElRef.current.muted = muted;
+    }
+  };
 
   const handleToggleRecordedPlay = () => {
+    if (playbackMode === "mono" && unpackedAudio) {
+      if (isRecordedPlaying) {
+        callerAudioRef.current?.pause();
+        gnomeAudioRef.current?.pause();
+        setIsRecordedPlaying(false);
+      } else {
+        const p1 = callerAudioRef.current?.play();
+        const p2 = gnomeAudioRef.current?.play();
+        Promise.allSettled([p1, p2]).then(() => {
+          setIsRecordedPlaying(true);
+        }).catch(() => {});
+      }
+      return;
+    }
+
     if (call?.recording_url && audioElRef.current) {
       if (isRecordedPlaying) {
         audioElRef.current.pause();
+        setIsRecordedPlaying(false);
       } else {
-        audioElRef.current.play().catch(() => {});
+        audioElRef.current.play().then(() => {
+          setIsRecordedPlaying(true);
+        }).catch(() => {});
       }
+      return;
     }
+
     setIsRecordedPlaying((prev) => !prev);
   };
 
   const handleSeekRecorded = (e: React.ChangeEvent<HTMLInputElement>) => {
     const nextTime = parseFloat(e.target.value);
     setRecordedCurrentTime(nextTime);
-    if (audioElRef.current) {
+    if (playbackMode === "mono" && unpackedAudio) {
+      if (callerAudioRef.current) callerAudioRef.current.currentTime = nextTime;
+      if (gnomeAudioRef.current) gnomeAudioRef.current.currentTime = nextTime;
+    } else if (audioElRef.current) {
       audioElRef.current.currentTime = nextTime;
     }
   };
@@ -145,11 +261,35 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
   const handleSkipRecorded = (delta: number) => {
     setRecordedCurrentTime((prev) => {
       const target = Math.max(0, Math.min(recordedDuration, prev + delta));
-      if (audioElRef.current) {
+      if (playbackMode === "mono" && unpackedAudio) {
+        if (callerAudioRef.current) callerAudioRef.current.currentTime = target;
+        if (gnomeAudioRef.current) gnomeAudioRef.current.currentTime = target;
+      } else if (audioElRef.current) {
         audioElRef.current.currentTime = target;
       }
       return target;
     });
+  };
+
+  const handleMonoTimeUpdate = () => {
+    if (!callerAudioRef.current) return;
+    const cur = callerAudioRef.current.currentTime;
+    setRecordedCurrentTime(cur);
+
+    // Keep gnome stream tightly synchronized if drift > 0.08s
+    if (gnomeAudioRef.current) {
+      const diff = Math.abs(gnomeAudioRef.current.currentTime - cur);
+      if (diff > 0.08) {
+        gnomeAudioRef.current.currentTime = cur;
+      }
+    }
+  };
+
+  const handleMonoEnded = () => {
+    setIsRecordedPlaying(false);
+    if (gnomeAudioRef.current) {
+      gnomeAudioRef.current.pause();
+    }
   };
 
   // ==========================================
@@ -205,25 +345,56 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
               Call Audio Playback
             </h3>
           </div>
-          <div className="flex items-center min-h-[28px]">
+          <div className="flex items-center gap-2 min-h-[28px]">
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 leading-none">
               Recording Available
+            </span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700/60 leading-none">
+              {playbackMode === "mono" ? (!unpackedAudio ? "Unpacking..." : "Mono 1-Ch") : "Stereo 2-Ch"}
             </span>
           </div>
         </div>
 
-        {/* Audio Element */}
+        {/* Audio Elements */}
         {call?.recording_url && (
-          <audio
-            ref={audioElRef}
-            src={call.recording_url}
-            onTimeUpdate={(e) => setRecordedCurrentTime((e.target as HTMLAudioElement).currentTime)}
-            onLoadedMetadata={(e) => {
-              const dur = (e.target as HTMLAudioElement).duration;
-              if (!isNaN(dur) && dur > 0) setRecordedDuration(dur);
-            }}
-            onEnded={() => setIsRecordedPlaying(false)}
-          />
+          playbackMode === "mono" && unpackedAudio ? (
+            <>
+              <audio
+                ref={callerAudioRef}
+                src={unpackedAudio.callerBlobUrl}
+                onLoadedMetadata={(e) => {
+                  const el = e.target as HTMLAudioElement;
+                  el.volume = isRecordedMuted ? 0 : recordedVolume;
+                  el.muted = isRecordedMuted;
+                  el.currentTime = recordedCurrentTime;
+                  if (!isNaN(el.duration) && el.duration > 0) setRecordedDuration(el.duration);
+                }}
+                onTimeUpdate={handleMonoTimeUpdate}
+                onEnded={handleMonoEnded}
+              />
+              <audio
+                ref={gnomeAudioRef}
+                src={unpackedAudio.gnomeBlobUrl}
+                onLoadedMetadata={(e) => {
+                  const el = e.target as HTMLAudioElement;
+                  el.volume = isRecordedMuted ? 0 : recordedVolume;
+                  el.muted = isRecordedMuted;
+                  el.currentTime = recordedCurrentTime;
+                }}
+              />
+            </>
+          ) : (
+            <audio
+              ref={audioElRef}
+              src={call.recording_url}
+              onTimeUpdate={(e) => setRecordedCurrentTime((e.target as HTMLAudioElement).currentTime)}
+              onLoadedMetadata={(e) => {
+                const dur = (e.target as HTMLAudioElement).duration;
+                if (!isNaN(dur) && dur > 0) setRecordedDuration(dur);
+              }}
+              onEnded={() => setIsRecordedPlaying(false)}
+            />
+          )
         )}
 
         {/* Playback Menu: Single Playback Bar & Time Display */}
@@ -280,7 +451,11 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setIsRecordedMuted((prev) => !prev)}
+                  onClick={() => {
+                    const nextMuted = !isRecordedMuted;
+                    setIsRecordedMuted(nextMuted);
+                    updateAudioVolumeAndMute(recordedVolume, nextMuted);
+                  }}
                   className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100 transition-all hover:scale-105 active:scale-95"
                   title={isRecordedMuted ? "Unmute" : "Mute"}
                 >
@@ -296,7 +471,7 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
                     const val = parseFloat(e.target.value);
                     setRecordedVolume(val);
                     if (isRecordedMuted) setIsRecordedMuted(false);
-                    if (audioElRef.current) audioElRef.current.volume = val;
+                    updateAudioVolumeAndMute(val, false);
                   }}
                   className="w-16 sm:w-20 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
                 />
@@ -317,7 +492,9 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
         </div>
 
         <div className="text-[11px] text-zinc-500 text-center font-mono">
-          Single encoded audio timeline merges caller and gnome dialogue streams.
+          {playbackMode === "mono"
+            ? "Caller and gnome streams are unpacked into dual simultaneous mono streams."
+            : "Caller and gnome streams are merged into a single stereo stream."}
         </div>
       </div>
     );

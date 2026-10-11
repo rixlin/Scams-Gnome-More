@@ -100,6 +100,8 @@ export interface PingResult {
   message?: string;
 }
 
+export type AudioPlaybackMode = "stereo" | "mono";
+
 export interface BackendLiveEvent {
   type:
     | "call.started"

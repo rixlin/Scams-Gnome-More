@@ -22,6 +22,7 @@ def _live_session(call_id: UUID) -> CallSession:
 @router.post("/feedback")
 async def feedback(call_id: UUID, body: FeedbackIn) -> dict:
     session = _live_session(call_id)
+    session.add_utterance("operator", body.text)
     session.operator_notes.put_nowait(prompts.operator_note(body.text))
     session.publish("gnome.updated", {"kind": "feedback", "text": body.text})
     return {"ok": True}
@@ -45,6 +46,7 @@ async def update_gnome(call_id: UUID, body: GnomeUpdateIn) -> dict:
     session = _live_session(call_id)
     text = body.feedback or body.instruction
     if text:
+        session.add_utterance("operator", text)
         session.operator_notes.put_nowait(prompts.operator_note(text))
         session.publish("gnome.updated", {"kind": "feedback", "text": text})
     if body.personality:

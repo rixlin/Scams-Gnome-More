@@ -61,15 +61,19 @@ async def call_detail(call_id: UUID):
 
 
 @router.get("/{call_id}/audio")
-async def call_audio(call_id: UUID, mono: bool = False) -> Response:
-    """The call recording: stereo WAV (left = caller, right = gnome), or both mixed into one channel."""
+async def call_audio(call_id: UUID, mono: bool = False, track: str | None = None) -> Response:
+    """The call recording: stereo WAV (left = caller, right = gnome), mono mix, or isolated caller/gnome track."""
     try:
         wav = await repo.get_call_audio(call_id)
     except repo.DatabaseUnavailable as e:
         raise _db_errors(e)
     if wav is None:
         raise HTTPException(404, "no audio for this call")
-    if mono:
+    if track == "caller":
+        wav = audio.extract_channel_wav(wav, 0)
+    elif track == "gnome":
+        wav = audio.extract_channel_wav(wav, 1)
+    elif mono or track == "mono":
         wav = audio.stereo_to_mono_wav(wav)
     return Response(content=wav, media_type="audio/wav")
 

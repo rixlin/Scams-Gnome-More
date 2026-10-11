@@ -80,6 +80,12 @@ def test_active_call_detail_and_update(client):
     })
     assert up.status_code == 200
 
+    # Verify operator injection is logged in call detail transcript
+    r_updated = client.get(f"/api/calls/{call_id}")
+    assert r_updated.status_code == 200
+    turns = r_updated.json()["transcript"]
+    assert any(t["speaker"] == "operator" and "mushrooms" in t["text"] for t in turns)
+
     # Delete active call is forbidden
     del_res = client.delete(f"/api/calls/{call_id}")
     assert del_res.status_code == 400
