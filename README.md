@@ -9,7 +9,7 @@ Built for Rutgers HackRU Fall 2026.
 ## 📁 Repository Structure
 
 ```text
-scams-gnome-more/
+Scams-Gnome-More/
 ├── gnome/                      # The Defense Suite
 │   ├── backend/                # FastAPI server (Twilio Media Streams, Gemini, ElevenLabs, Tiger Data)
 │   │   ├── app/                # Application logic, agents, audio pipeline, and WebSockets
