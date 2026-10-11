@@ -35,6 +35,7 @@ export function useCallTelemetry({
   const initialTranscriptRef = useRef(initialTranscript);
   const onCallEndedRef = useRef(onCallEnded);
   const activeTurnStateHistoryRef = useRef(activeTurnStateHistory);
+  const liveTurnCounterRef = useRef(0);
 
   useEffect(() => {
     initialTranscriptRef.current = initialTranscript;
@@ -110,10 +111,17 @@ export function useCallTelemetry({
             rawSpk === "caller" ? "user" : rawSpk;
           const isFinal = data.final ?? data.is_final ?? true;
           const text = data.text || "";
-          const turnId = data.turn_id || `turn-${data.seq ?? Date.now()}`;
+          const seq: number | undefined = data.seq ?? undefined;
+          // In-progress (non-final) chunks carry no seq, and several can arrive in the same
+          // millisecond, so use a per-hook counter rather than Date.now() for their key
+          const turnId = data.turn_id || (seq !== undefined ? `turn-${seq}` : `turn-live-${++liveTurnCounterRef.current}`);
 
           setLiveTranscript((prev) => {
             const currentList = prev.length > 0 ? prev : initialTranscriptRef.current;
+            // The socket replays the transcript so far on connect; skip lines we already loaded via REST
+            if (seq !== undefined && currentList.some((t) => t.seq === seq && t.final !== false)) {
+              return currentList;
+            }
             const lastTurn = currentList[currentList.length - 1];
 
             // If same speaker and last turn was in-progress, update in-place
