@@ -16,6 +16,7 @@ import {
 import { CallSessionDetail } from "../../lib/types";
 import { useCallDuration } from "../../hooks/useCallDuration";
 import { formatDuration, formatCallDateTime, formatRegionWithCountry } from "../../lib/utils";
+import { useNotification } from "../notifications/NotificationProvider";
 
 interface SessionHeaderProps {
   call: CallSessionDetail;
@@ -28,7 +29,9 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
   onTerminate,
   isTerminating = false,
 }) => {
+  const { notify } = useNotification();
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isClosingConfirm, setIsClosingConfirm] = useState(false);
   const elapsed = useCallDuration(
     call.started_at,
     call.status,
@@ -37,9 +40,29 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
   );
   const isActive = call.status === "active";
 
+  const handleCloseConfirm = () => {
+    setIsClosingConfirm(true);
+    setTimeout(() => {
+      setShowConfirm(false);
+      setIsClosingConfirm(false);
+    }, 160);
+  };
+
   const handleConfirmTerminate = async () => {
-    setShowConfirm(false);
-    await onTerminate("operator_manual_kill");
+    setIsClosingConfirm(true);
+    setTimeout(async () => {
+      setShowConfirm(false);
+      setIsClosingConfirm(false);
+      try {
+        await onTerminate("operator_manual_kill");
+        notify.error(
+          "Call Terminated",
+          `Disconnected active phone line with scammer ${call.scammer_number}.`
+        );
+      } catch {
+        // Handled in caller
+      }
+    }, 160);
   };
 
   return (
@@ -111,9 +134,19 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
       </div>
 
       {/* Confirmation Modal */}
-      {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px] animate-overlay-fade">
-          <div className="w-full max-w-md bg-zinc-900 border border-red-800/80 rounded-2xl p-6 shadow-2xl space-y-4 animate-dialog-zoom">
+      {(showConfirm || isClosingConfirm) && (
+        <div
+          onClick={handleCloseConfirm}
+          className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px] ${
+            isClosingConfirm ? "animate-overlay-fade-out" : "animate-overlay-fade"
+          }`}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-md bg-zinc-900 border border-red-800/80 rounded-2xl p-6 shadow-2xl space-y-4 ${
+              isClosingConfirm ? "animate-dialog-zoom-out" : "animate-dialog-zoom"
+            }`}
+          >
             <div className="flex items-center gap-3 text-red-400">
               <AlertTriangle className="w-6 h-6" />
               <h3 className="text-base font-bold text-zinc-100">Terminate Active Call?</h3>
@@ -123,7 +156,7 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
             </p>
             <div className="flex justify-end gap-3 pt-2">
               <button
-                onClick={() => setShowConfirm(false)}
+                onClick={handleCloseConfirm}
                 className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-all hover:scale-105 active:scale-95"
               >
                 Cancel

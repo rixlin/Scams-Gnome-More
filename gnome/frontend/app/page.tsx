@@ -6,6 +6,7 @@ import { fetchCallSessions, terminateCall, deleteCall } from "../lib/api";
 import { CallSection } from "../components/home/CallSection";
 import { Navbar } from "../components/layout/Navbar";
 import { formatRegionWithCountry } from "../lib/utils";
+import { useNotification } from "../components/notifications/NotificationProvider";
 import {
   RefreshCw,
   AlertCircle,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 
 export default function HomePage() {
+  const { notify } = useNotification();
   const [backendCalls, setBackendCalls] = useState<CallSessionSummary[]>([]);
   const [debugCalls, setDebugCalls] = useState<CallSessionSummary[]>(() => {
     if (typeof window !== "undefined") {
@@ -44,6 +46,13 @@ export default function HomePage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleteClosing, setIsDeleteClosing] = useState(false);
+
+  // Termination modal state
+  const [terminatingCallId, setTerminatingCallId] = useState<string | null>(null);
+  const [activeTerminatingCall, setActiveTerminatingCall] = useState<CallSessionSummary | null>(null);
+  const [isTerminatingCall, setIsTerminatingCall] = useState(false);
+  const [isTerminateClosing, setIsTerminateClosing] = useState(false);
 
   const loadCalls = useCallback(async (isSilent = false) => {
     if (!isSilent) setRefreshing(true);
@@ -151,10 +160,8 @@ export default function HomePage() {
   const [selectedDate, setSelectedDate] = useState("");
 
   // Terminate confirmation state
-  const [terminatingCallId, setTerminatingCallId] = useState<string | null>(null);
-  const [isTerminatingCall, setIsTerminatingCall] = useState(false);
-
-  const callToTerminate = allCalls.find((c) => c.id === terminatingCallId);
+  const callToTerminate =
+    allCalls.find((c) => c.id === terminatingCallId) || activeTerminatingCall;
 
   const hasActiveFilters =
     searchNumber.trim() !== "" ||
@@ -256,11 +263,24 @@ export default function HomePage() {
   // Terminate prompt & confirm handlers
   const handlePromptTerminate = (callId: string) => {
     setTerminatingCallId(callId);
+    const found = allCalls.find((c) => c.id === callId);
+    if (found) setActiveTerminatingCall(found);
+  };
+
+  const handleCloseTerminateConfirm = () => {
+    setIsTerminateClosing(true);
+    setTimeout(() => {
+      setTerminatingCallId(null);
+      setActiveTerminatingCall(null);
+      setIsTerminateClosing(false);
+    }, 160);
   };
 
   const handleConfirmTerminate = async () => {
     if (!terminatingCallId) return;
     const callId = terminatingCallId;
+    const callObj = allCalls.find((c) => c.id === callId);
+    const scammerNum = callObj?.scammer_number;
     setIsTerminatingCall(true);
 
     const isDebug = debugCalls.some((c) => c.id === callId);
@@ -278,52 +298,95 @@ export default function HomePage() {
         return updated;
       });
       setIsTerminatingCall(false);
-      setTerminatingCallId(null);
+      setIsTerminateClosing(true);
+      setTimeout(() => {
+        setTerminatingCallId(null);
+        setActiveTerminatingCall(null);
+        setIsTerminateClosing(false);
+      }, 160);
+      notify.error(
+        "Call Terminated",
+        `Disconnected active phone line with scammer ${scammerNum || "caller"}.`
+      );
       return;
     }
 
     try {
       await terminateCall(callId, "operator_dashboard_terminate");
       await loadCalls(true);
+      notify.error(
+        "Call Terminated",
+        `Disconnected active phone line with scammer ${scammerNum || "caller"}.`
+      );
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to terminate call.");
+      notify.warning("Termination Notice", err instanceof Error ? err.message : "Failed to terminate call.");
     } finally {
       setIsTerminatingCall(false);
-      setTerminatingCallId(null);
+      setIsTerminateClosing(true);
+      setTimeout(() => {
+        setTerminatingCallId(null);
+        setActiveTerminatingCall(null);
+        setIsTerminateClosing(false);
+      }, 160);
     }
   };
 
-  // Selection toggle handlers
+  // Selection toggle handlers (active calls are disallowed from selection/deletion)
   const handleToggleSelect = (callId: string) => {
+    const call = allCalls.find((c) => c.id === callId);
+    if (call && call.status === "active") return; // Active calls cannot be selected
     setSelectedIds((prev) =>
       prev.includes(callId) ? prev.filter((id) => id !== callId) : [...prev, callId]
     );
   };
 
   const handleSelectAll = () => {
-    const selectableIds = filteredCalls.map((c) => c.id);
-    const allFilteredSelected =
+    // Only select completed/ended calls
+    const selectableEndedCalls = filteredCalls.filter((c) => c.status !== "active");
+    const selectableIds = selectableEndedCalls.map((c) => c.id);
+    const allSelected =
       selectableIds.length > 0 &&
       selectableIds.every((id) => selectedIds.includes(id));
-    if (allFilteredSelected) {
+    if (allSelected) {
       setSelectedIds((prev) => prev.filter((id) => !selectableIds.includes(id)));
     } else {
       setSelectedIds((prev) => Array.from(new Set([...prev, ...selectableIds])));
     }
   };
 
+  const handleCloseDeleteConfirm = () => {
+    setIsDeleteClosing(true);
+    setTimeout(() => {
+      setShowDeleteConfirm(false);
+      setIsDeleteClosing(false);
+    }, 160);
+  };
+
   const handleDeleteSelected = () => {
-    if (selectedIds.length === 0) return;
+    const deletableIds = selectedIds.filter((id) => {
+      const c = allCalls.find((call) => call.id === id);
+      return c && c.status !== "active";
+    });
+    if (deletableIds.length === 0) return;
     setShowDeleteConfirm(true);
   };
 
   const handleConfirmDeleteSelected = async () => {
-    if (selectedIds.length === 0) return;
+    // Safeguard: only delete completed calls
+    const deletableIds = selectedIds.filter((id) => {
+      const c = allCalls.find((call) => call.id === id);
+      return c && c.status !== "active";
+    });
+
+    if (deletableIds.length === 0) {
+      handleCloseDeleteConfirm();
+      return;
+    }
 
     setIsDeleting(true);
 
     // Filter out debug calls immediately
-    const remainingDebug = debugCalls.filter((c) => !selectedIds.includes(c.id));
+    const remainingDebug = debugCalls.filter((c) => !deletableIds.includes(c.id));
     setDebugCalls(remainingDebug);
     if (typeof window !== "undefined") {
       window.localStorage.setItem("gnome_debug_calls", JSON.stringify(remainingDebug));
@@ -331,7 +394,7 @@ export default function HomePage() {
         const storedDetails = JSON.parse(
           window.localStorage.getItem("gnome_debug_call_details") || "{}"
         );
-        for (const id of selectedIds) {
+        for (const id of deletableIds) {
           delete storedDetails[id];
         }
         window.localStorage.setItem(
@@ -342,7 +405,7 @@ export default function HomePage() {
     }
 
     // Attempt backend delete for non-debug calls
-    const backendIdsToDelete = selectedIds.filter(
+    const backendIdsToDelete = deletableIds.filter(
       (id) => !debugCalls.some((d) => d.id === id)
     );
 
@@ -352,11 +415,22 @@ export default function HomePage() {
       );
     }
 
-    // Refresh and exit selection mode
+    const deletedCount = deletableIds.length;
     setSelectedIds([]);
     setIsSelectionMode(false);
     setIsDeleting(false);
-    setShowDeleteConfirm(false);
+
+    setIsDeleteClosing(true);
+    setTimeout(() => {
+      setShowDeleteConfirm(false);
+      setIsDeleteClosing(false);
+    }, 160);
+
+    notify.info(
+      "Call History Purged",
+      `Permanently removed ${deletedCount} completed call record${deletedCount > 1 ? "s" : ""}.`
+    );
+
     await loadCalls(true);
   };
 
@@ -589,7 +663,7 @@ export default function HomePage() {
               : "No active calls currently connected. Forwarded scam calls will appear here automatically."
           }
           onTerminateCall={handlePromptTerminate}
-          isSelectionMode={isSelectionMode}
+          isSelectionMode={false}
           selectedIds={selectedIds}
           onToggleSelect={handleToggleSelect}
         />
@@ -612,9 +686,19 @@ export default function HomePage() {
         />
 
         {/* Delete Confirmation Modal (Consistent with Call Termination Dialog) */}
-        {showDeleteConfirm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px] animate-overlay-fade">
-            <div className="w-full max-w-md bg-zinc-900 border border-red-800/80 rounded-2xl p-6 shadow-2xl space-y-4 animate-dialog-zoom">
+        {(showDeleteConfirm || isDeleteClosing) && (
+          <div
+            onClick={handleCloseDeleteConfirm}
+            className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px] ${
+              isDeleteClosing ? "animate-overlay-fade-out" : "animate-overlay-fade"
+            }`}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className={`w-full max-w-md bg-zinc-900 border border-red-800/80 rounded-2xl p-6 shadow-2xl space-y-4 ${
+                isDeleteClosing ? "animate-dialog-zoom-out" : "animate-dialog-zoom"
+              }`}
+            >
               <div className="flex items-center gap-3 text-red-400">
                 <AlertTriangle className="w-6 h-6 shrink-0" />
                 <h3 className="text-base font-bold text-zinc-100">
@@ -627,7 +711,7 @@ export default function HomePage() {
               </p>
               <div className="flex justify-end gap-3 pt-2">
                 <button
-                  onClick={() => setShowDeleteConfirm(false)}
+                  onClick={handleCloseDeleteConfirm}
                   disabled={isDeleting}
                   className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-all hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:active:scale-100"
                 >
@@ -646,9 +730,19 @@ export default function HomePage() {
         )}
 
         {/* Terminate Active Call Confirmation Modal (Matches Session Page) */}
-        {terminatingCallId && callToTerminate && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px] animate-overlay-fade">
-            <div className="w-full max-w-md bg-zinc-900 border border-red-800/80 rounded-2xl p-6 shadow-2xl space-y-4 animate-dialog-zoom">
+        {(terminatingCallId || isTerminateClosing) && callToTerminate && (
+          <div
+            onClick={handleCloseTerminateConfirm}
+            className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px] ${
+              isTerminateClosing ? "animate-overlay-fade-out" : "animate-overlay-fade"
+            }`}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className={`w-full max-w-md bg-zinc-900 border border-red-800/80 rounded-2xl p-6 shadow-2xl space-y-4 ${
+                isTerminateClosing ? "animate-dialog-zoom-out" : "animate-dialog-zoom"
+              }`}
+            >
               <div className="flex items-center gap-3 text-red-400">
                 <AlertTriangle className="w-6 h-6 shrink-0" />
                 <h3 className="text-base font-bold text-zinc-100">Terminate Active Call?</h3>
@@ -665,7 +759,7 @@ export default function HomePage() {
               </p>
               <div className="flex justify-end gap-3 pt-2">
                 <button
-                  onClick={() => setTerminatingCallId(null)}
+                  onClick={handleCloseTerminateConfirm}
                   disabled={isTerminatingCall}
                   className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-all hover:scale-105 active:scale-95 disabled:hover:scale-100 disabled:active:scale-100"
                 >

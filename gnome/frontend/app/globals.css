@@ -341,6 +341,61 @@ body {
   }
 }
 
+/* Dialogs & Pop-ups: Zoom out to ~94% (closing animation opposite of opening) */
+@keyframes dialogZoomOut {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+@keyframes dropdownZoomOut {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+}
+
+@keyframes overlayFadeOut {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Notifications: Slide & Zoom in from top-right, exit smoothly */
+@keyframes notificationEnter {
+  0% {
+    opacity: 0;
+    transform: translateX(24px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes notificationExit {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(24px) scale(0.94);
+  }
+}
+
 /* Page Navigation: Fade current page to nothing, then fade in next page */
 @keyframes pageFadeIn {
   0% {
@@ -361,32 +416,41 @@ body {
 }
 
 .animate-dialog-zoom {
-  animation: dialogZoomIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: dialogZoomIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-dialog-zoom-out {
+  animation: dialogZoomOut 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-dropdown-zoom {
   animation: dropdownZoomIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+.animate-dropdown-zoom-out {
+  animation: dropdownZoomOut 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 .animate-overlay-fade {
   animation: overlayFadeIn 0.2s ease-out forwards;
 }
 
+.animate-overlay-fade-out {
+  animation: overlayFadeOut 0.16s ease-in forwards;
+}
+
+.animate-notification-enter {
+  animation: notificationEnter 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-notification-exit {
+  animation: notificationExit 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 .animate-page-fade-in {
-  animation: pageFadeIn 0.22s ease-out forwards;
+  animation: pageFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-page-fade-out {
-  animation: pageFadeOut 0.16s ease-in forwards;
-}
-
-/* Native Browser View Transitions fallback */
-@view-transition {
-  navigation: auto;
-}
-::view-transition-old(root) {
-  animation: 160ms ease-out both pageFadeOut;
-}
-::view-transition-new(root) {
-  animation: 220ms ease-in both pageFadeIn;
+  animation: pageFadeOut 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

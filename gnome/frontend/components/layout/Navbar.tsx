@@ -80,10 +80,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-base text-zinc-100 tracking-tight">
-                  GnomeGrove
+                  Scams Gnome More
                 </span>
                 <span className="text-xs px-2 py-0.5 rounded bg-zinc-800 font-mono text-zinc-400 border border-zinc-700/60">
-                  DEFENSE OPS
+                  v0.1.0
                 </span>
               </div>
               <p className="text-[11px] text-zinc-500 leading-none">

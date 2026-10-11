@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   X,
   Settings as SettingsIcon,
@@ -18,6 +18,7 @@ import { CallSessionSummary } from "../../lib/types";
 import { createSampleDebugCallDetail } from "../../lib/debug-call-generator";
 import { useTheme } from "../theme/ThemeProvider";
 import { THEME_OPTIONS } from "../../lib/theme";
+import { useNotification } from "../notifications/NotificationProvider";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -30,6 +31,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   onAddDebugCall,
 }) => {
+  const { notify } = useNotification();
+  const [isClosing, setIsClosing] = useState(false);
   const [activeTab, setActiveTab] = useState<"appearance" | "system" | "debug">("appearance");
   const [loading, setLoading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -37,7 +40,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const { theme, setTheme, currentOption } = useTheme();
   const [isThemeDropdownOpen, setIsThemeDropdownOpen] = useState(false);
+  const [isDropdownClosing, setIsDropdownClosing] = useState(false);
   const themeDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  const closeThemeDropdown = useCallback(() => {
+    setIsDropdownClosing(true);
+    setTimeout(() => {
+      setIsThemeDropdownOpen(false);
+      setIsDropdownClosing(false);
+    }, 140);
+  }, []);
+
+  const toggleThemeDropdown = useCallback(() => {
+    if (isThemeDropdownOpen) {
+      closeThemeDropdown();
+    } else {
+      setIsThemeDropdownOpen(true);
+    }
+  }, [isThemeDropdownOpen, closeThemeDropdown]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -46,7 +66,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         themeDropdownRef.current &&
         !themeDropdownRef.current.contains(event.target as Node)
       ) {
-        setIsThemeDropdownOpen(false);
+        if (isThemeDropdownOpen) {
+          closeThemeDropdown();
+        }
       }
     }
     if (isThemeDropdownOpen) {
@@ -55,7 +77,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isThemeDropdownOpen]);
+  }, [isThemeDropdownOpen, closeThemeDropdown]);
 
   // System Settings state
   const [backendUrl, setBackendUrl] = useState(() => {
@@ -80,7 +102,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [debugCountry, setDebugCountry] = useState("USA");
   const [debugGnomeNumber, setDebugGnomeNumber] = useState("+1 (800) 420-GNOM");
   const [debugGnomeName, setDebugGnomeName] = useState("Barnaby");
-  const [debugSuccessMsg, setDebugSuccessMsg] = useState<string | null>(null);
 
   // Load backend settings on open
   useEffect(() => {
@@ -104,8 +125,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       active = false;
     };
   }, [isOpen]);
-
-  if (!isOpen) return null;
 
   const handleSaveSystemSettings = async () => {
     setLoading(true);
@@ -188,21 +207,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       onAddDebugCall(newCall);
     }
 
-    setDebugSuccessMsg(`Active session added: ${newCall.scammer_number} (${newCall.gnome_name})`);
-    setTimeout(() => setDebugSuccessMsg(null), 3000);
+    notify.success(
+      "Active Session Created",
+      `Added debug call for ${newCall.scammer_number} (${newCall.gnome_name}).`
+    );
   };
 
   const handleModalClose = () => {
-    setSavedSuccess(false);
-    setErrorMessage(null);
-    setDebugSuccessMsg(null);
-    setIsThemeDropdownOpen(false);
-    onClose();
+    setIsClosing(true);
+    setTimeout(() => {
+      setSavedSuccess(false);
+      setErrorMessage(null);
+      setIsThemeDropdownOpen(false);
+      setIsDropdownClosing(false);
+      setIsClosing(false);
+      onClose();
+    }, 160);
   };
 
+  if (!isOpen && !isClosing) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px] animate-overlay-fade">
-      <div className="relative w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden h-[540px] max-h-[95vh] animate-dialog-zoom">
+    <div
+      onClick={handleModalClose}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px] ${
+        isClosing ? "animate-overlay-fade-out" : "animate-overlay-fade"
+      }`}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={`relative w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden h-[540px] max-h-[95vh] ${
+          isClosing ? "animate-dialog-zoom-out" : "animate-dialog-zoom"
+        }`}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/60">
           <div className="flex items-center gap-2.5">
@@ -239,7 +276,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }`}
           >
             <Server className="w-4 h-4" />
-            System &amp; Server
+            Backend
           </button>
           <button
             onClick={() => setActiveTab("debug")}
@@ -250,7 +287,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }`}
           >
             <Bug className="w-4 h-4" />
-            Debug &amp; Preview
+            Debug Tools
           </button>
         </div>
 
@@ -270,13 +307,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {debugSuccessMsg && (
-            <div className="flex items-center gap-2 p-3 text-xs rounded-lg bg-emerald-950/40 border border-emerald-800/60 text-emerald-300">
-              <Check className="w-4 h-4 shrink-0 text-emerald-400" />
-              <span>{debugSuccessMsg}</span>
-            </div>
-          )}
-
           {/* TAB 1: APPEARANCE (DROPDOWN MENU) */}
           {activeTab === "appearance" && (
             <div className="space-y-4">
@@ -290,7 +320,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {/* Dropdown Trigger */}
                   <button
                     type="button"
-                    onClick={() => setIsThemeDropdownOpen((prev) => !prev)}
+                    onClick={toggleThemeDropdown}
                     className="w-full bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded-xl px-4 py-3 flex items-center justify-between text-xs text-zinc-100 transition-all hover:scale-105 active:scale-95 focus:outline-none focus:border-emerald-500/80"
                   >
                     {/* Left: Theme Name + Badge */}
@@ -325,8 +355,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
 
                   {/* Dropdown Options List */}
-                  {isThemeDropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1.5 z-40 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden py-1 divide-y divide-zinc-900 animate-dropdown-zoom">
+                  {(isThemeDropdownOpen || isDropdownClosing) && (
+                    <div
+                      className={`absolute top-full left-0 right-0 mt-1.5 z-40 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden py-1 divide-y divide-zinc-900 ${
+                        isDropdownClosing
+                          ? "animate-dropdown-zoom-out"
+                          : "animate-dropdown-zoom"
+                      }`}
+                    >
                       {THEME_OPTIONS.map((opt) => {
                         const isSelected = theme === opt.id;
                         return (
@@ -335,7 +371,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             type="button"
                             onClick={() => {
                               setTheme(opt.id);
-                              setIsThemeDropdownOpen(false);
+                              closeThemeDropdown();
                             }}
                             className={`w-full px-4 py-3 flex items-center justify-between text-xs transition-colors hover:bg-zinc-900 text-left ${
                               isSelected
@@ -379,7 +415,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: SYSTEM & SERVER */}
+          {/* TAB 2: BACKEND */}
           {activeTab === "system" && (
             <div className="space-y-4">
               <div>
@@ -439,12 +475,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 3: DEBUG & PREVIEW */}
+          {/* TAB 3: DEBUG TOOLS */}
           {activeTab === "debug" && (
             <div className="space-y-4">
               <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800/80">
                 <p className="text-xs text-zinc-400 leading-relaxed">
-                  Manually inject an active call session to preview how the call box looks on the home page and inspect the active card layout.
+                  Manually injects an active call session to preview call functionality.
                 </p>
               </div>
 

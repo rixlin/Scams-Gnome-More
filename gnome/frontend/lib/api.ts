@@ -182,12 +182,24 @@ export async function terminateCall(
 export async function deleteCall(
   id: string
 ): Promise<{ success: boolean; message?: string }> {
-  // Clean up from local debug storage if present
+  // Disallow deleting active calls
   if (typeof window !== "undefined") {
     try {
+      const storedCalls: CallSessionSummary[] = JSON.parse(
+        window.localStorage.getItem("gnome_debug_calls") || "[]"
+      );
+      const targetCall = storedCalls.find((c) => c.id === id);
+      if (targetCall && targetCall.status === "active") {
+        throw new Error("Active calls cannot be deleted. The call must be ended before deleting.");
+      }
+
       const storedDetails = JSON.parse(
         window.localStorage.getItem("gnome_debug_call_details") || "{}"
       );
+      if (storedDetails[id] && storedDetails[id].status === "active") {
+        throw new Error("Active calls cannot be deleted. The call must be ended before deleting.");
+      }
+
       if (storedDetails[id]) {
         delete storedDetails[id];
         window.localStorage.setItem(
@@ -195,9 +207,6 @@ export async function deleteCall(
           JSON.stringify(storedDetails)
         );
       }
-      const storedCalls: CallSessionSummary[] = JSON.parse(
-        window.localStorage.getItem("gnome_debug_calls") || "[]"
-      );
       const remainingCalls = storedCalls.filter((c) => c.id !== id);
       window.localStorage.setItem(
         "gnome_debug_calls",

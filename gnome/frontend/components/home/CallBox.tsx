@@ -164,20 +164,29 @@ export const CallBox: React.FC<CallBoxProps> = ({
 
       {/* Footer Navigation Link or Selection Action */}
       {isSelectionMode ? (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (onToggleSelect) onToggleSelect(call.id);
-          }}
-          className={`w-full text-center py-2 px-3 rounded-lg text-xs font-medium transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5 ${
-            isSelected
-              ? "bg-emerald-600 text-white font-semibold"
-              : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
-          }`}
-        >
-          {isSelected ? "Selected" : "Select Call"}
-        </button>
+        isActive ? (
+          <div
+            className="w-full text-center py-2 px-3 rounded-lg text-xs font-mono text-zinc-500 bg-zinc-950/60 border border-zinc-800/80 flex items-center justify-center gap-1.5 cursor-not-allowed select-none"
+            title="Active calls cannot be deleted. The call must be ended first."
+          >
+            <span>Active (Cannot Delete)</span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onToggleSelect) onToggleSelect(call.id);
+            }}
+            className={`w-full text-center py-2 px-3 rounded-lg text-xs font-medium transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5 ${
+              isSelected
+                ? "bg-emerald-600 text-white font-semibold"
+                : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
+            }`}
+          >
+            {isSelected ? "Selected" : "Select Call"}
+          </button>
+        )
       ) : (
         <Link
           href={`/calls/${call.id}`}
