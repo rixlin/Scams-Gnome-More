@@ -23,8 +23,10 @@ import {
   getBaseUrl,
   getWsBaseUrl,
   BACKEND_URL_CHANGED_EVENT,
+  setGnomeMode as setGnomeModeApi,
+  fetchGnomeMode,
 } from "../../lib/api";
-import { CallSessionSummary, AudioPlaybackMode } from "../../lib/types";
+import { CallSessionSummary, AudioPlaybackMode, GnomeMode } from "../../lib/types";
 import { createSampleDebugCallDetail } from "../../lib/debug-call-generator";
 import { useTheme } from "../theme/ThemeProvider";
 import { THEME_OPTIONS } from "../../lib/theme";
@@ -117,6 +119,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [defaultPersonality, setDefaultPersonality] = useState("");
   const [voiceId, setVoiceId] = useState("");
   const [generateNewGnome, setGenerateNewGnome] = useState(true);
+  const [gnomeMode, setGnomeMode] = useState<GnomeMode>("destroyer");
+  const [isUpdatingMode, setIsUpdatingMode] = useState(false);
 
   // Ping test states
   const [restPingState, setRestPingState] = useState<{
@@ -217,15 +221,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         if (settings.generate_new_gnome_per_call !== undefined) {
           setGenerateNewGnome(settings.generate_new_gnome_per_call);
         }
+        if (settings.gnome_mode !== undefined) {
+          setGnomeMode(settings.gnome_mode);
+        }
       })
       .catch(() => {
         // Fall back to default local state if backend is offline
       });
 
+    fetchGnomeMode()
+      .then((mode) => {
+        if (active) setGnomeMode(mode);
+      })
+      .catch(() => {});
+
     return () => {
       active = false;
     };
   }, [isOpen]);
+
+  const handleToggleGnomeMode = async (enabled: boolean) => {
+    const nextMode: GnomeMode = enabled ? "whimsy" : "destroyer";
+    setGnomeMode(nextMode);
+    setIsUpdatingMode(true);
+    try {
+      await setGnomeModeApi(nextMode, true);
+      notify.success(
+        enabled ? "Whimsy Mode Enabled" : "Whimsy Mode Disabled",
+        enabled
+          ? "The gnome will act for fun and no longer attack scammers."
+          : "The gnome will actively counter and disrupt scammers."
+      );
+    } catch {
+      notify.warning(
+        "Mode Notice",
+        "Could not immediately sync mode to server. It will be saved when you save server settings."
+      );
+    } finally {
+      setIsUpdatingMode(false);
+    }
+  };
 
   const handleSaveSystemSettings = async () => {
     setLoading(true);
@@ -249,6 +284,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         default_personality: defaultPersonality,
         voice_id: voiceId.trim() || null,
         generate_new_gnome_per_call: generateNewGnome,
+        gnome_mode: gnomeMode,
       });
 
       setSavedSuccess(true);
@@ -823,6 +859,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onChange={(e) => setGenerateNewGnome(e.target.checked)}
                     className="w-4 h-4 rounded accent-emerald-500 cursor-pointer"
                   />
+                </div>
+
+                {/* Whimsy Mode Toggle */}
+                <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/80">
+                  <div className="pr-4">
+                    <div className="flex items-center gap-2">
+                      <span className="block text-xs font-medium text-zinc-200">
+                        Whimsy Mode
+                      </span>
+                      <span
+                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                          gnomeMode === "whimsy"
+                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 font-semibold"
+                            : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                        }`}
+                      >
+                        {gnomeMode === "whimsy" ? "Enabled (Friendly)" : "Disabled (Aggressive)"}
+                      </span>
+                    </div>
+                    <span className="block text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
+                      When enabled, the gnome no longer attacks scammers and acts for fun.
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={gnomeMode === "whimsy"}
+                      onChange={(e) => handleToggleGnomeMode(e.target.checked)}
+                      disabled={isUpdatingMode}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500" />
+                  </label>
                 </div>
 
                 {/* Default Personality Archetype */}

@@ -1,6 +1,7 @@
 import {
   CallSessionSummary,
   CallSessionDetail,
+  GnomeMode,
   GnomeState,
   LiveGnomeUpdateRequest,
   PingResult,
@@ -475,6 +476,9 @@ export async function updateSettings(
   if (settings.aggression !== undefined) {
     backendPatch.aggression = settings.aggression;
   }
+  if (settings.gnome_mode !== undefined) {
+    backendPatch.gnome_mode = settings.gnome_mode;
+  }
 
   if (Object.keys(backendPatch).length > 0) {
     try {
@@ -491,7 +495,41 @@ export async function updateSettings(
     }
   }
 
+  if (settings.gnome_mode !== undefined) {
+    await setGnomeMode(settings.gnome_mode).catch(() => {});
+  }
+
   return { success: true };
+}
+
+export async function fetchGnomeMode(): Promise<GnomeMode> {
+  const baseUrl = getBaseUrl();
+  try {
+    const res = await fetch(`${baseUrl}/api/gnome/mode`, { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      return (data.mode as GnomeMode) || "destroyer";
+    }
+  } catch {
+    // Return fallback
+  }
+  return "destroyer";
+}
+
+export async function setGnomeMode(
+  mode: GnomeMode,
+  applyToActive = true
+): Promise<{ ok: boolean; mode: GnomeMode }> {
+  const baseUrl = getBaseUrl();
+  const res = await fetch(`${baseUrl}/api/gnome/mode`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode, apply_to_active: applyToActive }),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to update gnome mode: ${res.statusText}`);
+  }
+  return res.json();
 }
 
 export async function pingRest(targetUrl?: string): Promise<PingResult> {

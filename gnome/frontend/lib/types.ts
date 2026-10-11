@@ -81,6 +81,8 @@ export interface LiveGnomeUpdateRequest {
   voice_id?: string;
 }
 
+export type GnomeMode = "destroyer" | "whimsy";
+
 export interface SystemSettings {
   backend_api_url: string;
   backend_ws_url: string;
@@ -92,6 +94,7 @@ export interface SystemSettings {
   generate_new_gnome_per_call?: boolean;
   fixed_gnome?: Record<string, unknown> | null;
   aggression?: number;
+  gnome_mode?: GnomeMode;
 }
 
 export interface PingResult {
