@@ -599,7 +599,6 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
               </div>
               <div className="flex justify-between text-[10px] text-zinc-500 font-mono">
                 <span>Activity</span>
-                <span>{userLevel}%</span>
               </div>
             </div>
 
@@ -645,7 +644,6 @@ export const OverlappedAudioPlayer: React.FC<OverlappedAudioPlayerProps> = ({
               </div>
               <div className="flex justify-between text-[10px] text-zinc-500 font-mono">
                 <span>Activity</span>
-                <span>{gnomeLevel}%</span>
               </div>
             </div>
 

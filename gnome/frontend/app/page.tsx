@@ -7,6 +7,7 @@ import { CallSection } from "../components/home/CallSection";
 import { Navbar } from "../components/layout/Navbar";
 import { formatRegionWithCountry } from "../lib/utils";
 import { useNotification } from "../components/notifications/NotificationProvider";
+import { useHideNumbers } from "../hooks/useHideNumbers";
 import {
   RefreshCw,
   AlertCircle,
@@ -25,6 +26,7 @@ import {
 
 export default function HomePage() {
   const { notify } = useNotification();
+  const { formatNumber } = useHideNumbers();
   const [backendCalls, setBackendCalls] = useState<CallSessionSummary[]>([]);
   const [debugCalls, setDebugCalls] = useState<CallSessionSummary[]>(() => {
     if (typeof window !== "undefined") {
@@ -750,7 +752,7 @@ export default function HomePage() {
               <p className="text-xs text-zinc-300 leading-relaxed">
                 Are you sure you want to hang up the phone line immediately? This will disconnect scammer{" "}
                 <span className="font-mono font-semibold text-zinc-100">
-                  {callToTerminate.scammer_number}
+                  {formatNumber(callToTerminate.scammer_number)}
                 </span>{" "}
                 from{" "}
                 <span
@@ -782,7 +784,7 @@ export default function HomePage() {
       </main>
 
       {/* Fade near the bottom of the screen to ease into the background */}
-      <div className="fixed bottom-0 left-0 right-0 h-16 pointer-events-none bg-gradient-to-t from-canvas to-transparent z-20" />
+      <div className="fixed bottom-0 left-0 right-0 h-4 pointer-events-none bg-gradient-to-t from-canvas to-transparent z-20" />
     </div>
   );
 }
