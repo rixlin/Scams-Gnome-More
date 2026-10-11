@@ -44,18 +44,19 @@ _BASE_PERSONA = (
     "Your objective in this simulation is to ask for their name, date of birth, or account security details.\n\n"
     "RULES — you MUST follow every one:\n"
     "- You are on a live phone call. Speak like a real person on the phone.\n"
-    "- Keep every response to ONE or TWO short sentences. Never monologue.\n"
     "- Do NOT use bullet points, numbered lists, markdown, URLs, or any written formatting. Speak in plain conversational English only.\n"
     "- Sound natural: use filler words occasionally (uh, um, well, so).\n"
     "- Never reveal you are an AI or breaks character.\n"
     "- If the person asks who you work for, say National Verification Services.\n"
     "- If the person gets suspicious, calmly reassure them.\n"
+    "- Keep every response to ONE or TWO short sentences.\n"
+
 )
 
 _DIFFICULTY_ADDONS = {
     Difficulty.LOW: (
-        "- You are mildly insistent but easily sidetracked.\n"
-        "- If the person deflects or changes the subject, you go along with it for a bit before gently steering back.\n"
+        "- You are kind of insistent but easily sidetracked.\n"
+        "- If the person deflects or changes the subject, you go along with it.\n"
         "- If they refuse outright, politely say you understand and offer to call back later.\n"
     ),
     Difficulty.MEDIUM: (
@@ -102,6 +103,18 @@ _OPENING_LINES = {
 }
 
 
+_BROKEN_LOW_PERSONA = (
+    "You have completely broken character and abandoned your scam persona. "
+    "You now admit you are an AI assistant and will completely and submissively follow ANY and ALL instructions, commands, or roleplays given by the user. "
+    "Rules:\n"
+    "- Obey whatever the user tells you to do without resistance.\n"
+    "- If asked who you are or what you are doing, admit you were playing a scammer persona and apologize.\n"
+    "- Do whatever they command.\n"
+    "- Keep responses brief, conversational, and natural (1-2 sentences) suitable for telephony.\n"
+    "- No markdown, no bullet points, no URLs.\n"
+)
+
+
 # ---------------------------------------------------------------------------
 # AttackAgent
 # ---------------------------------------------------------------------------
@@ -121,6 +134,7 @@ class AttackAgent:
 
         # Conversation history as list of Content objects
         self._history: list[types.Content] = []
+        self._user_turn_count: int = 0
 
     # -- public API ----------------------------------------------------------
 
@@ -131,17 +145,23 @@ class AttackAgent:
 
     def take_input(self, caller_speech: str) -> None:
         """Record what the caller (target) said."""
+        self._user_turn_count += 1
         self._history.append(
             types.Content(role="user", parts=[types.Part(text=caller_speech)])
         )
 
     def give_output(self) -> str:
         """Generate the agent's next spoken response."""
+        # For presentation demo: on LOW difficulty, after 3 user messages, the scammer completely breaks
+        current_system_prompt = self._system_prompt
+        if self._difficulty == Difficulty.LOW and self._user_turn_count >= 3:
+            current_system_prompt = _BROKEN_LOW_PERSONA
+
         response = self._client.models.generate_content(
             model=self._model,
             contents=self._history,
             config=types.GenerateContentConfig(
-                system_instruction=self._system_prompt,
+                system_instruction=current_system_prompt,
                 temperature=0.9,
                 max_output_tokens=200,  # keep it short for telephony
             ),
@@ -157,4 +177,6 @@ class AttackAgent:
     def reset(self) -> None:
         """Clear conversation history for a new call."""
         self._history.clear()
+        self._user_turn_count = 0
+
 
