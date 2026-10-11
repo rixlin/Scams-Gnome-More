@@ -24,21 +24,28 @@ attacker/
 
 ## Quick Start
 
+### Option A: One-Command Launcher (Recommended)
+Starts the Cloudflare tunnel, auto-updates `BASE_WEBHOOK_URL` in `.env`, starts the FastAPI backend, and launches the Streamlit frontend all together:
+
 ```bash
-# 1 — Install dependencies (into active env, NO venv)
-pip install -r requirements.txt
+cd attacker
+./run.sh
+```
+Press `Ctrl+C` to stop all services simultaneously.
 
-# 2 — Copy and fill in secrets
-cp .env.example .env
-# edit .env with your real keys
+---
 
-# 3 — Start the webhook server
+### Option B: Manual (Separate Terminals)
+
+```bash
+# 1 — Start the webhook server
 uvicorn backend.server:app --host 0.0.0.0 --port 8000 --reload
 
-# 4 — (separate terminal) Start the Cloudflare tunnel
+# 2 — Start the Cloudflare tunnel
 ./run_tunnel.sh
+# copy generated trycloudflare.com URL into .env as BASE_WEBHOOK_URL
 
-# 5 — (separate terminal) Launch the Streamlit dashboard
+# 3 — Launch the Streamlit dashboard
 streamlit run frontend/app.py
 ```
 
