@@ -48,7 +48,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isClosing, setIsClosing] = useState(false);
   const [activeTab, setActiveTab] = useState<"frontend" | "system" | "debug">("frontend");
   const [loading, setLoading] = useState(false);
-  const [savedSuccess, setSavedSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Audio Playback Mode state
@@ -188,6 +187,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleToggleHideNumbers = (enabled: boolean) => {
+    setHideNumbers(enabled);
     notify.success(
       enabled ? "Numbers Hidden" : "Numbers Visible",
       enabled
@@ -273,7 +273,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleSaveSystemSettings = async () => {
     setLoading(true);
     setErrorMessage(null);
-    setSavedSuccess(false);
 
     try {
       if (typeof window !== "undefined") {
@@ -295,10 +294,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         gnome_mode: gnomeMode,
       });
 
-      setSavedSuccess(true);
-      setTimeout(() => {
-        setSavedSuccess(false);
-      }, 3000);
+      notify.success(
+        "Server Settings Saved",
+        "Server connection and engine settings updated successfully."
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to save settings.";
       setErrorMessage(msg);
@@ -368,7 +367,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleModalClose = () => {
     setIsClosing(true);
     setTimeout(() => {
-      setSavedSuccess(false);
       setErrorMessage(null);
       setRestPingState({ status: "idle" });
       setWsPingState({ status: "idle" });
@@ -441,7 +439,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }`}
           >
             <Bug className="w-4 h-4" />
-            Debug Tools
+            Debug
           </button>
         </div>
 
@@ -451,13 +449,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex items-center gap-2 p-3 text-xs rounded-lg bg-red-950/40 border border-red-800/60 text-red-300">
               <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
               <span>{errorMessage}</span>
-            </div>
-          )}
-
-          {savedSuccess && (
-            <div className="flex items-center gap-2 p-3 text-xs rounded-lg bg-emerald-950/40 border border-emerald-800/60 text-emerald-300">
-              <Check className="w-4 h-4 shrink-0 text-emerald-400" />
-              <span>Settings updated successfully.</span>
             </div>
           )}
 
@@ -1008,7 +999,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </h4>
 
                 <p className="text-xs text-zinc-400 leading-relaxed">
-                  Injects a simulated active call session to preview call functionality.
+                  Injects a simulated active call session to preview call functionality. Local only.
                 </p>
 
                 <div className="space-y-3 pt-1">
@@ -1034,7 +1025,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   <div>
                     <label className="block text-xs font-medium text-zinc-300 mb-1">
-                      Region
+                      Scammer&apos;s Region
                     </label>
                     <input
                       type="text"
@@ -1048,7 +1039,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   <div>
                     <label className="block text-xs font-medium text-zinc-300 mb-1">
-                      Country (ISO-3)
+                      Scammer&apos;s Country (ISO-3)
                     </label>
                     <input
                       type="text"
@@ -1064,7 +1055,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-zinc-300 mb-1">
-                      Gnome&apos;s Virtual Number
+                      Gnome&apos;s Number
                     </label>
                     <input
                       type="text"
@@ -1097,7 +1088,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-all hover:scale-105 active:scale-95"
                   >
                     <PlusCircle className="w-4 h-4" />
-                    Add Active Call Session (Preview)
+                    Add Simulated Call Session
                   </button>
                 </div>
                 </form>

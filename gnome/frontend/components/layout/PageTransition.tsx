@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useState, useTransition, useCallback } from "react";
+import React, { Suspense, useEffect, useRef, useState, useTransition, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 function RouteChangeListener({ onPathChange }: { onPathChange: (path: string) => void }) {
@@ -15,9 +15,21 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [isExiting, setIsExiting] = useState(false);
   const [, startTransition] = useTransition();
+  // Pending delayed navigation; non-null while a fade-out is in flight so repeat clicks are ignored
+  const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handlePathChange = useCallback(() => {
     setIsExiting(false);
+  }, []);
+
+  // With cacheComponents, the page we leave is hidden (not unmounted) and keeps its state.
+  // Reset it on hide so returning to it fades in cleanly instead of replaying the fade-out first.
+  useEffect(() => {
+    return () => {
+      if (navTimerRef.current) clearTimeout(navTimerRef.current);
+      navTimerRef.current = null;
+      setIsExiting(false);
+    };
   }, []);
 
   // Intercept local internal anchor link clicks to fade out current page before route transition
@@ -64,9 +76,11 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
 
       // Fade out current page to nothing first
       e.preventDefault();
+      if (navTimerRef.current) return; // a navigation is already fading out
       setIsExiting(true);
 
-      setTimeout(() => {
+      navTimerRef.current = setTimeout(() => {
+        navTimerRef.current = null;
         startTransition(() => {
           router.push(href);
         });
